@@ -727,3 +727,11 @@ button.aos-chat-send-btn:active {
   transition: opacity 0.2s ease-in-out;
   pointer-events: auto;
 }
+
+/* Accessibility: Support prefers-reduced-motion rules */
+@media (prefers-reduced-motion: reduce) {
+  .aos-page-transition-mask,
+  .aos-graph-overlay {
+    transition: none !important;
+  }
+}

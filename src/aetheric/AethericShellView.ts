@@ -919,8 +919,8 @@ export class AethericShellView extends ItemView {
       const meta = existingPage.querySelector(".aos-graph-meta");
       if (meta) {
         meta.empty();
-        meta.createSpan({ text: `${data.nodes.length} 个节点` });
-        meta.createSpan({ text: `${data.edges.length} 条关系` });
+        meta.createSpan({ text: `${data.nodes.length} 个节点 (索引预估)` });
+        meta.createSpan({ text: `${data.edges.length} 条关系 (索引预估)` });
         if (data.truncated) meta.createSpan({ text: "已为交互性能截断", cls: "is-warn" });
       }
 
@@ -991,8 +991,8 @@ export class AethericShellView extends ItemView {
       state.selectedFolderPath,
     );
     const meta = page.createDiv({ cls: "aos-graph-meta" });
-    meta.createSpan({ text: `${data.nodes.length} 个节点` });
-    meta.createSpan({ text: `${data.edges.length} 条关系` });
+    meta.createSpan({ text: `${data.nodes.length} 个节点 (索引预估)` });
+    meta.createSpan({ text: `${data.edges.length} 条关系 (索引预估)` });
     if (data.truncated) meta.createSpan({ text: "已为交互性能截断", cls: "is-warn" });
     const canvas = page.createDiv({ cls: "aos-graph-canvas" });
     canvas.setAttribute("style", "height: 100%; min-height: 480px; display: flex; flex-direction: column;");
@@ -1041,19 +1041,17 @@ export class AethericShellView extends ItemView {
     };
 
     try {
-      const viewCreator = (this.app as any).viewRegistry.getViewCreatorByType("localgraph");
-      if (!viewCreator) throw new Error("No view creator");
+      const viewType = this.graphScope === "current-file" ? "localgraph" : "graph";
+      const viewCreator = (this.app as any).viewRegistry.getViewCreatorByType(viewType);
+      if (!viewCreator) throw new Error(`No view creator for ${viewType}`);
 
-      // Build the next leaf locally. Assigning it to this.nativeGraphLeaf before
-      // disposing the previous view makes an old View appear to own the new
-      // canvas, so setState updates a detached renderer and returns blank.
       const nextGraphLeaf = {
         app: this.app,
         workspace: this.app.workspace,
         containerEl: canvas,
         view: null as any,
-        getDisplayText: () => "Local Graph",
-        getViewState: () => ({ type: "localgraph", state: {} }),
+        getDisplayText: () => viewType === "localgraph" ? "Local Graph" : "Graph",
+        getViewState: () => ({ type: viewType, state: {} }),
         setViewState: () => Promise.resolve(),
         getIcon: () => "graph",
         history: {
@@ -1084,6 +1082,7 @@ export class AethericShellView extends ItemView {
       let currentOptions: any = {};
       const folderPath = this.plugin.store.getSnapshot().selectedFolderPath;
       let searchQuery = "";
+      
       if (this.graphScope === "current-folder" && folderPath) {
         searchQuery = `path:"${folderPath}"`;
       } else if (this.graphScope === "current-workspace") {
@@ -1091,40 +1090,66 @@ export class AethericShellView extends ItemView {
         if (ws && ws.rootPaths && ws.rootPaths.length > 0) {
           searchQuery = ws.rootPaths.map(p => `path:"${p}"`).join(" OR ");
         }
+      } else if (this.graphScope === "current-tag") {
+        if (this.selectedNode && this.selectedNode.tags && this.selectedNode.tags.length > 0) {
+          searchQuery = this.selectedNode.tags.map(t => {
+            const name = t.startsWith("#") ? t : `#${t}`;
+            return `tag:${name}`;
+          }).join(" OR ");
+        } else {
+          searchQuery = "tag:#nonexistentplaceholder";
+        }
+      }
+
+      if (viewType === "graph") {
+        delete currentOptions["localJumps"];
+        delete currentOptions["localBacklinks"];
+        delete currentOptions["localForelinks"];
       }
 
       let tFile = this.app.vault.getAbstractFileByPath(seedPath);
-      if (!(tFile instanceof TFile)) {
-        throw new Error(`Graph seed is not a file: ${seedPath}`);
+      if (viewType === "localgraph") {
+        if (!(tFile instanceof TFile)) {
+          throw new Error(`Graph seed is not a file: ${seedPath}`);
+        }
       }
 
+      // Check if we can reuse the existing view
       if (this.nativeGraphView) {
-        if (this.nativeGraphLeaf && this.nativeGraphLeaf.containerEl === canvas) {
+        const currentViewType = this.nativeGraphView.getViewType();
+        if (currentViewType === viewType && this.nativeGraphLeaf && this.nativeGraphLeaf.containerEl === canvas) {
           const overlay = canvas.createDiv({ cls: "aos-graph-overlay" });
           const spinner = overlay.createDiv({ cls: "aos-spinner" });
           overlay.style.opacity = "0";
           void overlay.offsetHeight;
           overlay.style.opacity = "1";
 
-          if (tFile && typeof (this.nativeGraphView as any).setFile === "function") {
+          if (viewType === "localgraph" && tFile && typeof (this.nativeGraphView as any).setFile === "function") {
             try {
               (this.nativeGraphView as any).setFile(tFile);
             } catch (e) {
               console.warn("Failed to set file on existing graph view", e);
             }
           }
-          const graphState = {
+          const graphState = viewType === "localgraph" ? {
             file: tFile ? tFile.path : seedPath,
             options: {
               "collapse-filter": true,
               "localJumps": 1,
               "localBacklinks": true,
               "localForelinks": true,
-              "showTags": this.graphScope === "current-tag",
+              "showTags": false,
+              ...currentOptions,
+              "search": searchQuery
+            }
+          } : {
+            options: {
+              "collapse-filter": true,
               ...currentOptions,
               "search": searchQuery
             }
           };
+          
           await this.nativeGraphView.setState(graphState, { history: false });
           if (abortIfStale()) {
             overlay.remove();
@@ -1135,8 +1160,17 @@ export class AethericShellView extends ItemView {
             overlay.remove();
             return;
           }
+          
+          // Fade out helper with timeout safety fallback
           overlay.style.opacity = "0";
-          overlay.addEventListener("transitionend", () => overlay.remove());
+          let removed = false;
+          const cleanup = () => {
+            if (removed) return;
+            removed = true;
+            overlay.remove();
+          };
+          overlay.addEventListener("transitionend", cleanup);
+          window.setTimeout(cleanup, 300);
           return;
         }
 
@@ -1174,9 +1208,6 @@ export class AethericShellView extends ItemView {
       this.nativeGraphLeaf = nextGraphLeaf;
       this.nativeGraphView = graphView;
 
-      // Match WorkspaceLeaf's normal lifecycle: load the Component before
-      // opening the View. Calling onOpen first can complete without throwing
-      // while leaving LocalGraphView with no renderable canvas.
       graphView.load();
       if (typeof graphView.onOpen === "function") {
         await graphView.onOpen();
@@ -1186,7 +1217,7 @@ export class AethericShellView extends ItemView {
         }
       }
 
-      if (tFile && typeof (graphView as any).setFile === "function") {
+      if (viewType === "localgraph" && tFile && typeof (graphView as any).setFile === "function") {
         try {
           (graphView as any).setFile(tFile);
         } catch (e) {
@@ -1194,14 +1225,20 @@ export class AethericShellView extends ItemView {
         }
       }
 
-      const graphState = {
+      const graphState = viewType === "localgraph" ? {
         file: tFile ? tFile.path : seedPath,
         options: {
           "collapse-filter": true,
           "localJumps": 1,
           "localBacklinks": true,
           "localForelinks": true,
-          "showTags": this.graphScope === "current-tag",
+          "showTags": false,
+          ...currentOptions,
+          "search": searchQuery
+        }
+      } : {
+        options: {
+          "collapse-filter": true,
           ...currentOptions,
           "search": searchQuery
         }
@@ -1213,10 +1250,6 @@ export class AethericShellView extends ItemView {
         return;
       }
 
-      // LocalGraphView can fail silently: setState resolves, but its private
-      // renderer never creates a usable canvas. Wait for layout, resize once,
-      // then treat a missing/zero-sized canvas as a native-mount failure so the
-      // SVG fallback remains a real safety net instead of dead code.
       await new Promise<void>(resolve => window.setTimeout(resolve, 160));
       if (abortIfStale()) {
         overlay.remove();
@@ -1240,16 +1273,21 @@ export class AethericShellView extends ItemView {
         || nativeCanvas.width < 2
         || nativeCanvas.height < 2
       ) {
-        throw new Error("Native localgraph mounted without a renderable canvas");
+        throw new Error(`Native ${viewType} mounted without a renderable canvas`);
       }
 
-      // Clear the diagnostic only after the renderer passes the visual-health
-      // check, not merely after its state promise resolves.
       void this.app.vault.adapter.remove("graph_error.txt").catch(() => {});
 
-      // Fade out the cold boot overlay
+      // Fade out helper with timeout safety fallback
       overlay.style.opacity = "0";
-      overlay.addEventListener("transitionend", () => overlay.remove());
+      let removed = false;
+      const cleanup = () => {
+        if (removed) return;
+        removed = true;
+        overlay.remove();
+      };
+      overlay.addEventListener("transitionend", cleanup);
+      window.setTimeout(cleanup, 300);
 
     } catch (err) {
       if (abortIfStale()) return;
