@@ -70,6 +70,8 @@ export class AethericShellView extends ItemView {
   private nativeGraphView: any = null;
   private nativeGraphLeaf: any = null;
   private currentRenderId = 0;
+  private borrowedClaudianEl: HTMLElement | null = null;
+  private borrowedClaudianLeaf: any | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: ScriptoriumPlugin) {
     super(leaf);
@@ -150,6 +152,7 @@ export class AethericShellView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.restoreBorrowedClaudian();
     this.currentRenderId += 1;
     this.disposeNativeGraphView();
     this.virtualList?.destroy();
@@ -575,7 +578,21 @@ export class AethericShellView extends ItemView {
     this.refreshVirtualList();
   }
 
+  private restoreBorrowedClaudian(): void {
+    if (this.borrowedClaudianEl && this.borrowedClaudianLeaf && this.borrowedClaudianLeaf.view) {
+      try {
+        const view = this.borrowedClaudianLeaf.view;
+        (view as any).containerEl?.appendChild(this.borrowedClaudianEl);
+      } catch (e) {
+        console.warn("Failed to restore borrowed claudian view", e);
+      }
+    }
+    this.borrowedClaudianEl = null;
+    this.borrowedClaudianLeaf = null;
+  }
+
   public renderContext(): void {
+    this.restoreBorrowedClaudian();
     this.contextPane.empty();
     const header = this.contextPane.createDiv({ cls: "aos-context-header" });
     header.createDiv({ cls: "aos-context-title", text: this.selectedNode?.title ?? "节点上下文" });
@@ -693,10 +710,43 @@ export class AethericShellView extends ItemView {
     }
   }
 
-    private async renderContextAgent(parent: HTMLElement, node: KnowledgeNodeViewModel): Promise<void> {
+      private async renderContextAgent(parent: HTMLElement, node: KnowledgeNodeViewModel): Promise<void> {
     const card = parent.createDiv({ cls: "aos-context-card" });
     card.setAttribute("style", "padding: 12px; display: flex; flex-direction: column; gap: 12px;");
     
+    // Check if Claudian plugin is enabled
+    const claudianPlugin = (this.app as any).plugins?.plugins?.["realclaudian"];
+    if (claudianPlugin) {
+      const chatSection = card.createDiv({ cls: "aos-agent-chat-mvp" });
+      const chatTitle = chatSection.createDiv({ text: "💬 Claudian 智能协同对讲机 (已融合)" });
+      chatTitle.setAttribute("style", "font-size: 11px; font-weight: bold; margin-bottom: 8px; color: var(--aos-gold);");
+      
+      try {
+        let leaf: any = this.app.workspace.getLeavesOfType("claudian-view")[0] || null;
+        if (!leaf) {
+          leaf = this.app.workspace.getRightLeaf(false);
+          await leaf.setViewState({ type: "claudian-view", active: false });
+        }
+        if (leaf && leaf.view) {
+          this.restoreBorrowedClaudian();
+          this.borrowedClaudianEl = (leaf.view as any).contentEl;
+          this.borrowedClaudianLeaf = leaf;
+          
+          const embedContainer = chatSection.createDiv({ cls: "aos-claudian-embed" });
+          embedContainer.setAttribute("style", "height: 480px; display: flex; flex-direction: column; border: 1px solid var(--aos-border); border-radius: var(--aos-radius); overflow: hidden; background: var(--aos-surface-muted);");
+          embedContainer.appendChild((leaf.view as any).contentEl);
+          
+          if (typeof (leaf.view as any).onResize === "function") {
+            try { (leaf.view as any).onResize(); } catch(e) {}
+          }
+          return;
+        }
+      } catch (e) {
+        console.warn("Failed to embed Claudian view, falling back to local chat", e);
+        chatSection.createDiv({ cls: "aos-empty-state", text: "无法嵌入 Claudian 视图，已切换回离线留言模式。" });
+      }
+    }
+
     // 1. Last Agent Run History (If any)
     const historySection = card.createDiv({ cls: "aos-agent-history-section" });
     const histTitle = historySection.createDiv({ text: "📋 节点执行历史" });
@@ -744,7 +794,7 @@ export class AethericShellView extends ItemView {
       const exists = await adapter.exists(chatFilePath);
       if (!exists) {
         await adapter.mkdir(".agents/chat").catch(() => {});
-        chatContent = "**System** (" + new Date().toLocaleTimeString("zh-CN", { hour12: false }) + "): 🤖 [天工台]: 你好！协作 Agent 对讲机已启动。本对话与本地 `.agents/chat/dialog.md` 实时绑定。我在下一次唤醒时将读取此处的历史上下文。";
+        chatContent = "**System** (" + new Date().toLocaleTimeString("zh-CN", { hour12: false }) + "): 🤖 [天工台]: 你好！协作 Agent 对讲机已启动。本对话与本地 \`.agents/chat/dialog.md\` 实时绑定。我在下一次唤醒时将读取此处的历史上下文。";
         await adapter.write(chatFilePath, chatContent);
       } else {
         chatContent = await adapter.read(chatFilePath);
