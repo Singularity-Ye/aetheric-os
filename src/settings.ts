@@ -16,6 +16,7 @@ export interface ScriptoriumSettings {
   hamasxiangDaemonToken: string;
   workspaces: AethericWorkspace[];
   shellState: AethericShellState;
+  weatherCache?: { data: any; timestamp: number };
 }
 
 export const DEFAULT_SETTINGS: ScriptoriumSettings = {
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: ScriptoriumSettings = {
   hamasxiangDaemonToken: "",
   workspaces: DEFAULT_WORKSPACES,
   shellState: DEFAULT_SHELL_STATE,
+  weatherCache: undefined,
 };
 
 export function mergeSettings(raw: Partial<ScriptoriumSettings> | null | undefined): ScriptoriumSettings {

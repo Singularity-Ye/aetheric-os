@@ -9,6 +9,7 @@ import {
   TFolder,
   WorkspaceLeaf,
   normalizePath,
+  requestUrl,
   setIcon,
 } from "obsidian";
 import ScriptoriumPlugin from "../main";
@@ -489,6 +490,8 @@ export class AethericShellView extends ItemView {
     const heading = page.createDiv({ cls: "aos-page-heading" });
     heading.createDiv({ cls: "aos-page-title", text: "总览 Overview" });
     heading.createDiv({ cls: "aos-page-subtitle", text: "真实 Vault 活动、当前工作域与知识流状态" });
+
+    this.renderLifeDashboard(page);
 
     const workspace = this.getWorkspace();
     const today = new Date();
@@ -2439,6 +2442,293 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  }
+
+  private async fetchWeather(): Promise<any> {
+    const cache = this.plugin.settings.weatherCache;
+    const now = Date.now();
+    if (cache && now - cache.timestamp < 3600000) {
+      return cache.data;
+    }
+    try {
+      const response = await requestUrl({
+        url: "https://wttr.in/Hangzhou?format=j1",
+        method: "GET",
+        contentType: "application/json",
+        throw: false,
+      });
+      if (response.status === 200) {
+        let data = response.json;
+        if (typeof data === "string") {
+          try { data = JSON.parse(data); } catch(e) {}
+        }
+        if (data && data.current_condition) {
+          this.plugin.settings.weatherCache = { data, timestamp: now };
+          await this.plugin.saveSettings();
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch weather from wttr.in", e);
+    }
+    return cache ? cache.data : null;
+  }
+
+  private async loadTodoItems(): Promise<Array<{ index: number; text: string; completed: boolean; lineContent: string }>> {
+    const path = "08_密室/todo.md";
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return [];
+    const content = await this.app.vault.read(file);
+    const lines = content.split(/\r?\n/);
+    const todos = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const match = line.match(/^\s*-\s*\[([ xX])\]\s*(.*)$/);
+      if (match) {
+        todos.push({
+          index: i,
+          completed: match[1].toLowerCase() === "x",
+          text: match[2].trim(),
+          lineContent: line
+        });
+      }
+    }
+    return todos;
+  }
+
+  private async toggleTodoItem(item: any): Promise<void> {
+    const path = "08_密室/todo.md";
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return;
+    const content = await this.app.vault.read(file);
+    const lines = content.split(/\r?\n/);
+    if (lines[item.index] !== undefined) {
+      const completedChar = !item.completed ? "x" : " ";
+      lines[item.index] = lines[item.index].replace(/-\s*\[([ xX])\]/, `- [${completedChar}]`);
+      await this.app.vault.modify(file, lines.join("\n"));
+      this.renderOverview();
+    }
+  }
+
+  private async addTodoItem(text: string): Promise<void> {
+    const path = "08_密室/todo.md";
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return;
+    const content = await this.app.vault.read(file);
+    const separator = content.endsWith("\n") ? "" : "\n";
+    const updated = content + `${separator}- [ ] ${text.trim()}\n`;
+    await this.app.vault.modify(file, updated);
+    this.renderOverview();
+  }
+
+  private async addInspiration(text: string): Promise<void> {
+    const path = "08_密室/灵感池.md";
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return;
+    const content = await this.app.vault.read(file);
+    const todayStr = new Date().toISOString().split("T")[0];
+    const separator = content.endsWith("\n") ? "" : "\n";
+    const updated = content + `${separator}*   *${todayStr}*：${text.trim()}\n`;
+    await this.app.vault.modify(file, updated);
+    new Notice("💡 灵感已成功记入密室灵感池！");
+    this.renderOverview();
+  }
+
+  private async loadThreeFocusItems(): Promise<string[]> {
+    const path = "08_密室/林下工作台.md";
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return ["⏳ (未配置焦点)", "⏳ (未配置焦点)", "⏳ (未配置焦点)"];
+    const content = await this.app.vault.read(file);
+    const lines = content.split(/\r?\n/);
+    const items: string[] = [];
+    let inThreeThings = false;
+    for (const line of lines) {
+      if (line.includes("### 今日三件事")) {
+        inThreeThings = true;
+        continue;
+      }
+      if (inThreeThings) {
+        if (line.startsWith("## ") || line.startsWith("---")) {
+          break;
+        }
+        const match = line.match(/^\s*-\s*\[([ xX])\]\s*(.*)$/);
+        if (match) {
+          const completed = match[1].toLowerCase() === "x";
+          const text = match[2].trim() || "(空焦点)";
+          items.push(`${completed ? "✅" : "⏳"} ${text}`);
+        }
+        if (items.length >= 3) break;
+      }
+    }
+    while (items.length < 3) items.push("⏳ (空焦点)");
+    return items;
+  }
+
+  private async getRandomFoodChoice(): Promise<string> {
+    const path = "08_密室/生活计划/美食清单.md";
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return "今天随便吃点吧";
+    const content = await this.app.vault.read(file);
+    const lines = content.split(/\r?\n/);
+    const foods: string[] = [];
+    let inWantToGo = false;
+    for (const line of lines) {
+      if (line.includes("## 🧭 种草待探")) {
+        inWantToGo = true;
+        continue;
+      }
+      if (line.includes("## ") && !line.includes("## 🧭 种草待探")) {
+        inWantToGo = false;
+      }
+      if (inWantToGo) {
+        const match = line.match(/^\s*-\s*\[\s*\]\s*(.*)$/);
+        if (match) {
+          foods.push(match[1].trim());
+        }
+      }
+    }
+    if (foods.length === 0) return "今天随便吃点吧";
+    const random = foods[Math.floor(Math.random() * foods.length)];
+    return random.replace(/\*\*/g, "").replace(/📍/g, "").replace(/#美食\/待探/g, "").trim();
+  }
+
+  private renderLifeDashboard(parent: HTMLElement): void {
+    const grid = parent.createDiv({ cls: "aos-life-grid" });
+    const statusCard = grid.createDiv({ cls: "aos-panel aos-life-status-card" });
+    const todoCard = grid.createDiv({ cls: "aos-panel aos-life-todo-card" });
+
+    statusCard.createDiv({ cls: "aos-spinner-small" });
+    todoCard.createDiv({ cls: "aos-spinner-small" });
+
+    Promise.all([
+      this.fetchWeather(),
+      this.loadThreeFocusItems(),
+      this.getRandomFoodChoice(),
+      this.loadTodoItems()
+    ]).then(([weather, focusItems, foodChoice, todos]) => {
+      this.populateLifeStatus(statusCard, weather, focusItems, foodChoice);
+      this.populateLifeTodo(todoCard, todos);
+    }).catch(err => {
+      console.error("Failed to load life dashboard data", err);
+      statusCard.empty();
+      statusCard.createDiv({ text: "生活数据加载失败", cls: "aos-panel-note" });
+      todoCard.empty();
+      todoCard.createDiv({ text: "待办数据加载失败", cls: "aos-panel-note" });
+    });
+  }
+
+  private populateLifeStatus(card: HTMLDivElement, weather: any, focusItems: string[], foodChoice: string): void {
+    card.empty();
+    card.createDiv({ cls: "aos-panel-title", text: "🏡 林下今日状态" });
+
+    const dateObj = new Date();
+    const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+    const month = String(dateObj.getMonth() + 1);
+    const dateNum = String(dateObj.getDate());
+    const weekdayStr = weekdays[dateObj.getDay()];
+    const yearStr = String(dateObj.getFullYear());
+
+    const dateRow = card.createDiv({ cls: "aos-life-date-row" });
+    const calendar = dateRow.createDiv({ cls: "aos-life-calendar-icon" });
+    calendar.createDiv({ cls: "month-tab", text: `${month}月` });
+    calendar.createDiv({ cls: "day-num", text: dateNum });
+
+    const dateText = dateRow.createDiv({ cls: "aos-life-date-text" });
+    dateText.createDiv({ cls: "weekday", text: weekdayStr });
+    dateText.createDiv({ cls: "full-date", text: `${yearStr}年${month}月${dateNum}日` });
+
+    // Weather widget
+    if (weather && weather.current_condition && weather.current_condition[0]) {
+      const current = weather.current_condition[0];
+      const temp = current.temp_C || "--";
+      const desc = current.weatherDesc?.[0]?.value || "未知天气";
+      const feels = current.FeelsLikeC || "--";
+      const humidity = current.humidity || "--";
+
+      const weatherWidget = card.createDiv({ cls: "aos-weather-widget" });
+      const currentEl = weatherWidget.createDiv({ cls: "aos-weather-current" });
+      currentEl.createDiv({ cls: "temp-val", text: `${temp}°C` });
+      currentEl.createDiv({ cls: "desc-val", text: `${desc} (体感 ${feels}°C)` });
+      currentEl.createDiv({ cls: "details-val", text: `湿度 ${humidity}%` });
+
+      const forecastEl = weatherWidget.createDiv({ cls: "aos-weather-forecast" });
+      const forecastDays = weather.weather || [];
+      for (const day of forecastDays.slice(0, 3)) {
+        const d = new Date(day.date);
+        const dayLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][d.getDay()];
+        const dayRow = forecastEl.createDiv({ cls: "forecast-day" });
+        dayRow.createSpan({ cls: "day-name", text: dayLabel });
+        dayRow.createSpan({ cls: "day-temp", text: `${day.mintempC}°~${day.maxtempC}°` });
+      }
+    }
+
+    // Today's Focus
+    card.createDiv({ cls: "aos-life-sub-title", text: "🎯 今日三件事" });
+    const focusContainer = card.createDiv({ cls: "aos-life-focus-list" });
+    for (const item of focusItems) {
+      focusContainer.createDiv({ cls: "aos-life-focus-item", text: item });
+    }
+
+    // Food choice
+    const foodRow = card.createDiv({ cls: "aos-life-food-recommend" });
+    foodRow.createSpan({ cls: "food-label", text: "🐸 今日食路推荐：" });
+    const foodName = foodRow.createSpan({ cls: "food-name", text: foodChoice });
+    const refreshBtn = foodRow.createEl("button", { cls: "aos-life-food-refresh-btn", text: "🔄", attr: { title: "换一个" } });
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.classList.add("is-spinning");
+      const newFood = await this.getRandomFoodChoice();
+      foodName.textContent = newFood;
+      setTimeout(() => refreshBtn.classList.remove("is-spinning"), 600);
+    });
+  }
+
+  private populateLifeTodo(card: HTMLDivElement, todos: any[]): void {
+    card.empty();
+    card.createDiv({ cls: "aos-panel-title", text: "🌲 密室今日小目标" });
+
+    const listContainer = card.createDiv({ cls: "aos-life-todo-list" });
+    if (todos.length === 0) {
+      listContainer.createDiv({ cls: "aos-empty-state", text: "今日暂无目标，在下方极速记录一个吧！" });
+    } else {
+      for (const todo of todos) {
+        const row = listContainer.createDiv({ cls: "aos-life-todo-row" });
+        const cb = row.createEl("input", { attr: { type: "checkbox" }, cls: "aos-life-todo-cb" });
+        cb.checked = todo.completed;
+
+        const label = row.createSpan({ text: todo.text, cls: "aos-life-todo-label" });
+        if (todo.completed) label.classList.add("is-completed");
+
+        cb.addEventListener("change", async () => {
+          label.classList.toggle("is-completed", cb.checked);
+          await this.toggleTodoItem(todo);
+        });
+      }
+    }
+
+    const inputRow = card.createDiv({ cls: "aos-life-input-row" });
+    const todoInput = inputRow.createEl("input", {
+      cls: "aos-life-todo-input",
+      attr: { placeholder: "➕ 添加今日小目标..." }
+    });
+    todoInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter" && todoInput.value.trim()) {
+        const text = todoInput.value.trim();
+        todoInput.value = "";
+        await this.addTodoItem(text);
+      }
+    });
+
+    const inspirationInput = inputRow.createEl("input", {
+      cls: "aos-life-inspiration-input",
+      attr: { placeholder: "💡 记录随笔与灵感..." }
+    });
+    inspirationInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter" && inspirationInput.value.trim()) {
+        const text = inspirationInput.value.trim();
+        inspirationInput.value = "";
+        await this.addInspiration(text);
+      }
+    });
   }
 }
 

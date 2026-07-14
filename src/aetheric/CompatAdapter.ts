@@ -37,6 +37,21 @@ export class CompatAdapter {
     const claudianPlugin = (app as any).plugins?.plugins?.["realclaudian"];
     if (!claudianPlugin) return;
 
+    // Privacy boundary for 08_密室
+    if (notePath.startsWith("08_密室/")) {
+      const allowed = [
+        "08_密室/todo.md",
+        "08_密室/林下工作台.md",
+        "08_密室/待办池.md",
+        "08_密室/灵感池.md"
+      ];
+      const isAllowed = allowed.includes(notePath) || notePath.startsWith("08_密室/生活计划/");
+      if (!isAllowed) {
+        console.warn(`[CompatAdapter] Blocked Claudian context sync for sensitive note: ${notePath}`);
+        return;
+      }
+    }
+
     try {
       const leaves = app.workspace.getLeavesOfType("claudian-view");
       for (const leaf of leaves) {

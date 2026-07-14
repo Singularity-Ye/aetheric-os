@@ -265,6 +265,17 @@ export class VaultIndexService {
   }
 
   private indexFile(file: TFile): void {
+    if (file.path.startsWith("08_密室/")) {
+      const allowed = [
+        "08_密室/todo.md",
+        "08_密室/林下工作台.md",
+        "08_密室/待办池.md",
+        "08_密室/灵感池.md"
+      ];
+      const isAllowed = allowed.includes(file.path) || file.path.startsWith("08_密室/生活计划/");
+      if (!isAllowed) return;
+    }
+
     const cache = this.app.metadataCache.getFileCache(file);
     const tags = cache ? (getAllTags(cache) ?? []) : [];
     this.filesByPath.set(file.path, {
