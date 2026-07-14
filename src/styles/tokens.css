@@ -1,0 +1,38 @@
+:root {
+  --aos-ivory: #fbf7ee;
+  --aos-paper: #f6efe1;
+  --aos-paper-strong: #eee2cf;
+  --aos-surface: rgba(255, 252, 245, 0.92);
+  --aos-surface-muted: rgba(247, 239, 226, 0.78);
+  --aos-ink: #342c25;
+  --aos-ink-muted: #766b60;
+  --aos-gold: #a96f17;
+  --aos-gold-soft: #d6b06d;
+  --aos-border: rgba(171, 118, 42, 0.24);
+  --aos-border-strong: rgba(171, 118, 42, 0.42);
+  --aos-cyan: #2698c8;
+  --aos-purple: #7866d7;
+  --aos-green: #2e9b65;
+  --aos-red: #c8564e;
+  --aos-navy: #081827;
+  --aos-navy-soft: #10263a;
+  --aos-shadow: 0 14px 38px rgba(91, 64, 30, 0.08);
+  --aos-radius-sm: 8px;
+  --aos-radius: 12px;
+  --aos-radius-lg: 16px;
+  --aos-font-ui: "Inter", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --aos-font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+.theme-dark {
+  --aos-ivory: #191713;
+  --aos-paper: #211d18;
+  --aos-paper-strong: #2b251e;
+  --aos-surface: rgba(34, 30, 24, 0.96);
+  --aos-surface-muted: rgba(43, 37, 29, 0.86);
+  --aos-ink: #f2e7d5;
+  --aos-ink-muted: #b8ab99;
+  --aos-border: rgba(216, 176, 109, 0.2);
+  --aos-border-strong: rgba(216, 176, 109, 0.38);
+  --aos-shadow: 0 16px 42px rgba(0, 0, 0, 0.22);
+}

@@ -1,0 +1,27 @@
+/*
+ * Intentionally isolated native-shell override.
+ * Removing body.aetheric-os-shell-active restores the stock Obsidian chrome.
+ */
+body.aetheric-os-shell-active .workspace-ribbon,
+body.aetheric-os-shell-active .workspace-split.mod-left-split,
+body.aetheric-os-shell-active .workspace-split.mod-right-split,
+body.aetheric-os-shell-active .sidebar-toggle-button.mod-left,
+body.aetheric-os-shell-active .sidebar-toggle-button.mod-right,
+body.aetheric-os-shell-active .status-bar {
+  display: none !important;
+}
+
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container {
+  min-height: 34px;
+  opacity: .62;
+  transition: opacity .16s ease;
+}
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container:hover { opacity: 1; }
+body.aetheric-os-shell-active .workspace-leaf-content[data-type="aetheric-os-shell-view"] .view-header { display: none; }
+body.aetheric-os-shell-active .workspace-leaf-content[data-type="aetheric-os-shell-view"] .view-content { height: 100%; }
+
+@media (max-width: 700px) {
+  body.aetheric-os-shell-active .workspace-ribbon { display: flex !important; }
+  body.aetheric-os-shell-active .workspace-split.mod-left-split,
+  body.aetheric-os-shell-active .workspace-split.mod-right-split { display: flex !important; }
+}

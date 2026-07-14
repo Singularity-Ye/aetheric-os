@@ -1,0 +1,206 @@
+.aos-log-dock {
+  height: var(--aos-log-height, 154px);
+  min-height: 86px;
+  max-height: 72vh;
+  margin: 0 12px 10px 76px;
+  border: 1px solid rgba(169, 111, 23, 0.35) !important; /* Shimmering gold border */
+  border-radius: 12px;
+  color: #e5c184 !important; /* Glow warm gold runes */
+  background: rgba(22, 20, 18, 0.94) !important; /* Frosted deep obsidian stone */
+  backdrop-filter: blur(24px) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4) !important;
+  overflow: hidden;
+  position: relative;
+  z-index: 6;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.aos-log-dock:hover {
+  border-color: rgba(169, 111, 23, 0.65) !important;
+  box-shadow: 0 20px 48px rgba(169, 111, 23, 0.2) !important;
+}
+.aos-log-dock.is-collapsed {
+  height: 38px !important;
+  min-height: 38px;
+}
+.aos-log-dock.is-collapsed .aos-log-resize-handle,
+.aos-log-dock.is-collapsed .aos-log-terminal,
+.aos-log-dock.is-collapsed .aos-log-search,
+.aos-log-dock.is-collapsed .aos-log-select,
+.aos-log-dock.is-collapsed .aos-log-controls .aos-log-button:not(.is-collapse) { display: none; }
+.aos-log-dock.is-collapsed .aos-log-header { min-height: 38px; height: 38px; }
+.aos-log-dock.is-maximized { height: min(68vh, 680px) !important; }
+.aos-log-resize-handle { position: absolute; top: 0; left: 0; right: 0; height: 5px; cursor: ns-resize; background: transparent; }
+.aos-log-resize-handle:hover { background: rgba(169, 111, 23, 0.45); }
+
+/* Obsidian header styling */
+.aos-log-header {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px 6px 14px;
+  border-bottom: 1px solid rgba(169, 111, 23, 0.2) !important;
+  background: rgba(15, 13, 11, 0.5) !important;
+}
+.aos-log-title {
+  color: var(--aos-gold-soft, #d6b06d) !important;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  letter-spacing: 0.07em;
+  text-shadow: 0 0 8px rgba(216, 176, 109, 0.25);
+}
+.aos-log-controls { min-width: 0; flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+
+/* Control inputs styling */
+.aos-log-search {
+  width: min(240px, 28vw);
+  height: 28px !important;
+  border: 1px solid rgba(216, 176, 109, 0.25) !important;
+  background: rgba(12, 10, 8, 0.75) !important;
+  color: #e5edf5 !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+.aos-log-search:focus {
+  border-color: var(--aos-gold) !important;
+  box-shadow: 0 0 8px rgba(169, 111, 23, 0.3) !important;
+}
+.aos-log-select {
+  height: 28px;
+  border: 1px solid rgba(216, 176, 109, 0.25) !important;
+  background: rgba(12, 10, 8, 0.75) !important;
+  color: #c8d8e6 !important;
+  font-size: 9px;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Premium Metallic Obsidian Control Buttons */
+.aos-log-button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(216, 176, 109, 0.28) !important;
+  background: rgba(36, 32, 27, 0.75) !important;
+  color: var(--aos-gold-soft, #d6b06d) !important;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 6px !important;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.aos-log-button:hover {
+  border-color: var(--aos-gold) !important;
+  background: rgba(169, 111, 23, 0.15) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 10px rgba(169, 111, 23, 0.2) !important;
+  transform: translateY(-0.5px);
+}
+.aos-log-button:active {
+  transform: scale(0.96);
+}
+.aos-log-button.is-paused {
+  color: #f4bf62 !important;
+  border-color: rgba(244, 191, 98, 0.45) !important;
+  background: rgba(244, 191, 98, 0.08) !important;
+}
+.aos-log-button.is-unseen { color: #79c8f1 !important; }
+.aos-log-button.is-unseen:not(.is-visible), .aos-log-button.is-hidden { display: none; }
+
+/* Log Terminal & Rows styling */
+.aos-log-terminal {
+  height: calc(100% - 42px);
+  overflow: auto;
+  padding: 8px 12px 12px;
+  font-family: var(--aos-font-mono);
+  font-size: 9px;
+  scrollbar-color: rgba(169, 111, 23, 0.3) transparent;
+}
+.aos-log-row {
+  min-height: 24px;
+  display: grid;
+  grid-template-columns: 68px 58px 110px minmax(180px,1fr) 58px;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+}
+.aos-log-row:hover {
+  background: rgba(169, 111, 23, 0.05) !important;
+}
+.aos-log-time {
+  color: rgba(229, 193, 132, 0.48) !important;
+  font-size: 8px;
+}
+.aos-log-source {
+  color: var(--aos-gold-soft, #d6b06d) !important;
+  font-weight: 700;
+  font-size: 8.5px;
+  opacity: 0.85;
+}
+.aos-log-duration {
+  color: rgba(229, 193, 132, 0.35) !important;
+  font-size: 8px;
+  text-align: right;
+}
+
+/* Glowing pill badges on dark obsidian background */
+.aos-log-level {
+  display: inline-block;
+  text-align: center;
+  font-size: 7.5px;
+  font-weight: 900;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(38, 152, 200, 0.18);
+  color: #68bce7;
+  border: 1px solid rgba(38, 152, 200, 0.4);
+  text-transform: uppercase;
+}
+.aos-log-row.is-success .aos-log-level {
+  background: rgba(46, 155, 101, 0.18);
+  color: #4cd964;
+  border: 1px solid rgba(46, 155, 101, 0.4);
+}
+.aos-log-row.is-warn .aos-log-level {
+  background: rgba(244, 191, 98, 0.18);
+  color: #ffcc00;
+  border: 1px solid rgba(244, 191, 98, 0.4);
+}
+.aos-log-row.is-error .aos-log-level {
+  background: rgba(239, 119, 112, 0.18);
+  color: #ff3b30;
+  border: 1px solid rgba(239, 119, 112, 0.4);
+}
+.aos-log-message {
+  color: #e3dcd3 !important;
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.scriptorium-console-actions { display: flex; align-items: center; gap: 6px; }
+.scriptorium-console-clear.log-follow-btn.is-paused { color: #f7c35f; border-color: rgba(247,195,95,.45); }
+.scriptorium-log-new-badge { min-width: 22px; padding: 3px 7px; border-radius: 99px; background: rgba(62,178,226,.16); color: #78d3fa; font-size: 10px; cursor: pointer; }
+.scriptorium-log-new-badge.is-hidden { display: none; }
+
+/* Maximized Obsidian panel */
+.scriptorium-console-panel.is-expanded {
+  position: fixed;
+  inset: max(45px, 6vh) 24px 24px;
+  z-index: 1000;
+  height: auto !important;
+  min-height: 320px;
+  background: rgba(18, 16, 14, 0.96) !important;
+  backdrop-filter: blur(24px) !important;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.65) !important;
+  border: 1px solid rgba(169, 111, 23, 0.45) !important;
+}
+.scriptorium-console-panel.is-expanded .scriptorium-console-terminal { height: calc(100% - 48px); max-height: none; }
+
+@media (max-width: 900px) {
+  .aos-log-dock { margin-left: 66px; }
+  .aos-log-row { grid-template-columns: 64px 44px 90px minmax(150px,1fr); }
+  .aos-log-duration { display: none; }
+}

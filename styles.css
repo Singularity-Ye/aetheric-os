@@ -1,0 +1,460 @@
+/* Scriptorium (引经童子) Console Styles - Premium Celestial Sands Theme */
+
+/* Day/Night Theme CSS Tokens */
+.theme-dark .scriptorium-dashboard-container {
+    --bg-primary: #07100e;
+    --bg-stars: rgba(245, 239, 227, 0.12);
+    --text-primary: #f5efe3;
+    --text-muted: rgba(255, 240, 212, 0.84);
+    --text-accent: #ffe197;
+    --stars-opacity: 0.52;
+    
+    /* Container Amber Glass styles */
+    --glass-bg: rgba(28, 18, 12, 0.52);
+    --glass-bg-alt: rgba(20, 13, 8, 0.45);
+    --glass-border: rgba(216, 162, 71, 0.36);
+    --glass-border-highlight: rgba(231, 199, 126, 0.7);
+    --glass-shadow: 0 20px 48px rgba(0, 0, 0, 0.24);
+    --glass-inset: inset 0 1px 0 rgba(255, 247, 223, 0.22);
+    
+    /* Item backgrounds */
+    --item-bg: rgba(10, 20, 34, 0.48);
+    --item-border: rgba(231, 199, 126, 0.22);
+    --item-hover-bg: rgba(231, 199, 126, 0.1);
+    --item-text-active: #fff7df;
+    
+    --bg-radial: radial-gradient(circle at 10% 20%, rgba(20, 30, 25, 0.9) 0%, rgba(10, 15, 12, 0.95) 50%, #07100e 100%),
+                 radial-gradient(circle at 80% 20%, rgba(120, 90, 60, 0.15), transparent 40%);
+    --toggle-text-shadow: 0 0 8px rgba(231, 199, 126, 0.4);
+}
+
+.theme-light .scriptorium-dashboard-container {
+    --bg-primary: #f5efe3;
+    --bg-stars: rgba(99, 72, 28, 0.05);
+    --text-primary: #2c251d;
+    --text-muted: rgba(44, 37, 29, 0.7);
+    --text-accent: #996316;
+    --stars-opacity: 0.35;
+    
+    /* Container Amber Glass styles */
+    --glass-bg: rgba(242, 233, 218, 0.76);
+    --glass-bg-alt: rgba(232, 220, 202, 0.45);
+    --glass-border: rgba(180, 127, 45, 0.35);
+    --glass-border-highlight: rgba(180, 127, 45, 0.6);
+    --glass-shadow: 0 12px 32px rgba(120, 90, 60, 0.12);
+    --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    
+    /* Item backgrounds */
+    --item-bg: rgba(253, 251, 247, 0.75);
+    --item-border: rgba(180, 127, 45, 0.18);
+    --item-hover-bg: rgba(180, 127, 45, 0.08);
+    --item-text-active: #784d0f;
+    
+    --bg-radial: radial-gradient(circle at 50% 50%, #f9f6ef 0%, #f5efe3 60%, #eae2d2 100%),
+                 radial-gradient(circle at 20% 20%, rgba(215, 187, 135, 0.15), transparent 50%);
+    --toggle-text-shadow: none;
+}
+
+/* Base Container */
+.scriptorium-dashboard-container {
+    padding: 18px;
+    font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text-primary);
+    background: var(--bg-radial) !important;
+    height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-sizing: border-box;
+    position: relative;
+    transition: background 0.5s ease, color 0.5s ease;
+}
+
+/* Background Stars animation overlay */
+.scriptorium-stars-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: var(--stars-opacity);
+    background:
+        radial-gradient(circle at 22% 30%, var(--bg-stars) 0 1px, transparent 2px),
+        radial-gradient(circle at 48% 62%, var(--bg-stars) 0 1px, transparent 2px),
+        radial-gradient(circle at 82% 38%, var(--bg-stars) 0 1px, transparent 2px),
+        linear-gradient(rgba(215, 187, 135, 0.026) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(215, 187, 135, 0.018) 1px, transparent 1px);
+    background-size: 180px 180px, 240px 240px, 210px 210px, 52px 52px, 52px 52px;
+    animation: scriptorium-dust-drift 34s linear infinite;
+    transition: opacity 0.5s ease;
+}
+
+@keyframes scriptorium-dust-drift {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-90px, 70px, 0); }
+}
+
+/* Header Section */
+.scriptorium-header {
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 12px;
+    margin-bottom: 4px;
+    position: relative;
+    z-index: 2;
+}
+
+.scriptorium-eyebrow {
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    color: var(--text-accent);
+    text-transform: uppercase;
+    margin-bottom: 3px;
+    opacity: 0.85;
+}
+
+.scriptorium-title-area h2 {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.scriptorium-subtitle {
+    margin: 4px 0 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* Layout Main Split */
+.scriptorium-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    z-index: 2;
+    flex-grow: 1;
+}
+
+/* Config and Control Card */
+.scriptorium-card {
+    background: var(--glass-bg) !important;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border) !important;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--glass-shadow), var(--glass-inset) !important;
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.scriptorium-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--glass-border-highlight) !important;
+    box-shadow: var(--glass-shadow), 0 0 20px rgba(216, 162, 71, 0.2) !important;
+}
+
+.scriptorium-card h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-accent);
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Row elements */
+.scriptorium-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.scriptorium-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.scriptorium-select {
+    flex-grow: 1;
+    background: var(--glass-bg-alt) !important;
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text-primary) !important;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.scriptorium-select:focus {
+    outline: none;
+    border-color: var(--glass-border-highlight) !important;
+}
+
+/* Buttons */
+.scriptorium-btn {
+    background: var(--glass-bg-alt) !important;
+    color: var(--text-accent) !important;
+    border: 1px solid var(--glass-border) !important;
+    padding: 9px 15px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.84rem;
+    box-shadow: var(--glass-shadow);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scriptorium-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: var(--glass-border-highlight) !important;
+    background: var(--item-hover-bg) !important;
+    box-shadow: 0 0 15px rgba(216, 162, 71, 0.3) !important;
+}
+
+.scriptorium-btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.scriptorium-btn:disabled {
+    border-color: var(--glass-border) !important;
+    background: rgba(0, 0, 0, 0.15) !important;
+    color: var(--text-muted) !important;
+    cursor: not-allowed !important;
+    opacity: 0.55 !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.scriptorium-btn-icon {
+    background: var(--glass-bg-alt) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--glass-border) !important;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.scriptorium-btn-icon:hover {
+    border-color: var(--glass-border-highlight) !important;
+    background: var(--item-hover-bg) !important;
+}
+
+/* Console Log Panel */
+.scriptorium-console-panel {
+    background: rgba(9, 13, 22, 0.88) !important;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border) !important;
+    display: flex;
+    flex-direction: column;
+    height: 350px;
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    overflow: hidden;
+    position: relative;
+    z-index: 2;
+}
+
+.scriptorium-console-header {
+    background: rgba(30, 41, 59, 0.45);
+    padding: 8px 16px;
+    border-top-left-radius: 11px;
+    border-top-right-radius: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.scriptorium-console-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.scriptorium-console-clear {
+    background: none;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.76rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.scriptorium-console-clear:hover {
+    color: #c9d1d9;
+    background: #21262d;
+    border-color: #8b949e;
+}
+
+.scriptorium-terminal {
+    flex-grow: 1;
+    padding: 12px 16px;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: #cbd5e1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.scriptorium-terminal::after {
+    content: "▋";
+    color: var(--text-accent);
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 2px;
+    animation: terminal-cursor 1.1s infinite step-start;
+}
+
+@keyframes terminal-cursor {
+    50% { opacity: 0; }
+}
+
+/* Custom Scrollbars */
+.scriptorium-terminal::-webkit-scrollbar,
+.scriptorium-dashboard-container::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.scriptorium-terminal::-webkit-scrollbar-track,
+.scriptorium-dashboard-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+.scriptorium-terminal::-webkit-scrollbar-thumb,
+.scriptorium-dashboard-container::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 4px;
+}
+.scriptorium-terminal::-webkit-scrollbar-thumb:hover,
+.scriptorium-dashboard-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text-accent);
+}
+
+/* Spinner / Loader */
+.spinning {
+    animation: scriptorium-spin 1s linear infinite;
+}
+
+@keyframes scriptorium-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* File List & Tiny buttons */
+.scriptorium-file-list {
+    margin-top: 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    background: var(--glass-bg-alt);
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 6px;
+}
+.scriptorium-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 8px;
+    font-size: 0.8rem;
+    border-bottom: 1px solid rgba(216, 162, 71, 0.1);
+    color: var(--text-primary);
+}
+.scriptorium-file-item:last-child {
+    border-bottom: none;
+}
+.scriptorium-file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-grow: 1;
+    margin-right: 10px;
+}
+.scriptorium-btn-tiny {
+    padding: 2px 6px;
+    font-size: 0.72rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-accent);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.scriptorium-btn-tiny:hover {
+    background: var(--item-hover-bg);
+    border-color: var(--glass-border-highlight);
+}
+
+/* Knowledge Gaps Card */
+.scriptorium-gaps-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.scriptorium-gap-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px dashed rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+}
+.scriptorium-gap-text {
+    font-weight: 700;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 70%;
+}
+.scriptorium-gap-source {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-left: 6px;
+    font-weight: normal;
+}
+.scriptorium-btn-create-node {
+    background: rgba(16, 185, 129, 0.1) !important;
+    border: 1px solid rgba(16, 185, 129, 0.4) !important;
+    color: #34d399 !important;
+    padding: 3px 8px;
+    font-size: 0.76rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s ease;
+}
+.scriptorium-btn-create-node:hover {
+    background: rgba(16, 185, 129, 0.2) !important;
+    border-color: #34d399 !important;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+}
+
