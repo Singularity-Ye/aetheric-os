@@ -1107,6 +1107,17 @@ export class AethericShellView extends ItemView {
     };
 
     const applyEngineOptions = (query: string) => {
+      try {
+        const graphPlugin = (this.app as any).internalPlugins?.getPluginById("graph")?.instance;
+        if (graphPlugin && graphPlugin.options) {
+          graphPlugin.options.search = query;
+          graphPlugin.options.showTags = this.graphScope === "current-tag";
+          void graphPlugin.saveData().catch(() => {});
+        }
+      } catch (e) {
+        console.warn("Failed to update global graph plugin options", e);
+      }
+
       const engine = this.nativeGraphView ? (this.nativeGraphView as any).dataEngine : null;
       if (engine) {
         if (engine.options) {
@@ -1114,11 +1125,13 @@ export class AethericShellView extends ItemView {
           engine.options.showTags = this.graphScope === "current-tag";
         }
         if (typeof engine.onOptionsChange === "function") {
-          try {
-            engine.onOptionsChange();
-          } catch (e) {
-            console.warn("Failed to trigger dataEngine.onOptionsChange", e);
-          }
+          window.setTimeout(() => {
+            try {
+              engine.onOptionsChange();
+            } catch (e) {
+              console.warn("Failed to trigger dataEngine.onOptionsChange", e);
+            }
+          }, 50);
         }
       }
     };
