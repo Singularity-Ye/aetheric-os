@@ -1084,11 +1084,11 @@ export class AethericShellView extends ItemView {
       let searchQuery = "";
       
       if (this.graphScope === "current-folder" && folderPath) {
-        searchQuery = `path:"${folderPath}"`;
+        searchQuery = `path:"${normalizePath(folderPath)}"`;
       } else if (this.graphScope === "current-workspace") {
         const ws = this.getWorkspace();
         if (ws && ws.rootPaths && ws.rootPaths.length > 0) {
-          searchQuery = ws.rootPaths.map(p => `path:"${p}"`).join(" OR ");
+          searchQuery = ws.rootPaths.map(p => `path:"${normalizePath(p)}"`).join(" OR ");
         }
       } else if (this.graphScope === "current-tag") {
         if (this.selectedNode && this.selectedNode.tags && this.selectedNode.tags.length > 0) {
@@ -1138,14 +1138,15 @@ export class AethericShellView extends ItemView {
               "localJumps": 1,
               "localBacklinks": true,
               "localForelinks": true,
-              "showTags": false,
               ...currentOptions,
+              "showTags": false,
               "search": searchQuery
             }
           } : {
             options: {
               "collapse-filter": true,
               ...currentOptions,
+              "showTags": this.graphScope === "current-tag",
               "search": searchQuery
             }
           };
@@ -1232,14 +1233,15 @@ export class AethericShellView extends ItemView {
           "localJumps": 1,
           "localBacklinks": true,
           "localForelinks": true,
-          "showTags": false,
           ...currentOptions,
+          "showTags": false,
           "search": searchQuery
         }
       } : {
         options: {
           "collapse-filter": true,
           ...currentOptions,
+          "showTags": this.graphScope === "current-tag",
           "search": searchQuery
         }
       };
