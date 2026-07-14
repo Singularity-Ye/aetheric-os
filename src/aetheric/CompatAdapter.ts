@@ -90,16 +90,23 @@ export class CompatAdapter {
 
   static safeApplyGraphSearch(graphView: any, searchQuery: string, showTags: boolean): void {
     const engine = graphView?.dataEngine;
-    if (engine && typeof engine.setOptions === "function" && engine.requestUpdateSearch && typeof engine.requestUpdateSearch.run === "function") {
-      try {
-        engine.setOptions({
-          search: searchQuery,
-          showTags: showTags,
-        });
-        engine.requestUpdateSearch.run();
-      } catch (e) {
-        console.error("[CompatAdapter] Failed to apply graph search query", e);
-      }
+    if (
+      !engine
+      || typeof engine.setOptions !== "function"
+      || !engine.requestUpdateSearch
+      || typeof engine.requestUpdateSearch.run !== "function"
+    ) {
+      throw new Error("Embedded graph search engine is unavailable");
+    }
+
+    try {
+      engine.setOptions({
+        search: searchQuery,
+        showTags: showTags,
+      });
+      engine.requestUpdateSearch.run();
+    } catch (e) {
+      throw new Error(`Failed to apply search options: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 }

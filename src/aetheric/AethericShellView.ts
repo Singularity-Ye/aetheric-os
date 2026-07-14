@@ -155,6 +155,7 @@ export class AethericShellView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.agentRenderTx++;
     this.restoreBorrowedClaudian();
     this.currentRenderId += 1;
     this.disposeNativeGraphView();
@@ -599,6 +600,7 @@ export class AethericShellView extends ItemView {
   }
 
   public renderContext(): void {
+    this.agentRenderTx++;
     this.restoreBorrowedClaudian();
     this.contextPane.empty();
     const header = this.contextPane.createDiv({ cls: "aos-context-header" });
