@@ -132,6 +132,7 @@ export interface OperationArtifact {
   title: string;
   status: string;
   summary?: string;
+  originalText?: string;
   sourceUrl?: string;
   createdAt: number;
   path?: string;

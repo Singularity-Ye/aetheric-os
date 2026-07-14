@@ -2162,7 +2162,16 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       primary.createDiv({ cls: "aos-task-title", text: artifact.title });
       
       if (artifact.summary) {
-        primary.createDiv({ cls: "aos-artifact-summary-block", text: artifact.summary });
+        const summaryBlock = primary.createDiv({ cls: "aos-artifact-summary-block" });
+        const cleanSummary = artifact.summary.trim();
+        const cleanOriginal = artifact.originalText ? artifact.originalText.trim() : "";
+        if (cleanOriginal && cleanOriginal !== cleanSummary) {
+          summaryBlock.addClass("is-bilingual");
+          summaryBlock.createDiv({ cls: "aos-summary-col-zh", text: cleanSummary });
+          summaryBlock.createDiv({ cls: "aos-summary-col-en", text: cleanOriginal });
+        } else {
+          summaryBlock.setText(cleanSummary);
+        }
       }
       
       const timeStr = new Date(artifact.createdAt).toLocaleString("zh-CN", { hour12: false });

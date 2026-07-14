@@ -46,6 +46,7 @@ interface DaemonArtifactRecord {
   title?: string;
   status?: string;
   summary?: string;
+  original_text?: string;
   source_url?: string;
   created_at?: string;
   path?: string;
@@ -236,6 +237,7 @@ export class HamasxiangAdapter {
         title: String(item.title ?? "未命名产物"),
         status: String(item.status ?? "unknown"),
         summary: item.summary ? String(item.summary) : undefined,
+        originalText: item.original_text ? String(item.original_text) : undefined,
         sourceUrl: item.source_url ? String(item.source_url) : undefined,
         createdAt: this.parseTime(item.created_at) ?? Date.now(),
         path: item.path ? String(item.path) : undefined,
