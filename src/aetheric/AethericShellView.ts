@@ -1728,11 +1728,11 @@ export class AethericShellView extends ItemView {
     // 3. Switch to the target tab first for instant visual feedback and UI restoration
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
 
-    // 4. Load the file content in the active tab
-    await leaf.openFile(file);
-
-    // 5. Expand the outline sidebar panel
+    // 4. Expand the outline sidebar panel concurrently while the file loads
     this.app.workspace.rightSplit.expand();
+
+    // 5. Load the file content in the active tab
+    await leaf.openFile(file);
 
     this.plugin.logBus.append("success", "workspace.open", `已在原生编辑器和右侧大纲栏打开：${node.path}`);
   }
