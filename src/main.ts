@@ -62,6 +62,13 @@ export default class ScriptoriumPlugin extends Plugin {
       callback: () => void this.enableAethericUi(),
     });
     this.addCommand({
+      id: "reload-obsidian-app",
+      name: "重新加载 Obsidian 窗口 (Reload Window)",
+      callback: () => {
+        (this.app as any).commands.executeCommandById("app:reload");
+      },
+    });
+    this.addCommand({
       id: "copy-selected-node-relative-path",
       name: "复制当前节点的 Vault 相对路径",
       hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "C" }],
