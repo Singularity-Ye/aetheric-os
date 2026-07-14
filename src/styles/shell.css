@@ -515,53 +515,50 @@ button.aos-chat-send-btn:active {
 .aos-graph-node.is-dataset circle { fill: #e6f5ec; stroke: var(--aos-green); }
 
 .aos-flow-row {
-  min-height: 110px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
   padding: 10px 5px;
 }
 .aos-flow-item {
-  flex: 1;
-  min-width: 0;
-  padding: 12px 10px;
-  text-align: center;
-  border: 1px solid rgba(171, 118, 42, 0.15);
-  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border: 1px solid rgba(171, 118, 42, 0.12);
+  border-radius: 8px;
   position: relative;
   background: var(--aos-surface-muted);
-  box-shadow: 0 4px 12px rgba(91, 64, 30, 0.03);
+  box-shadow: 0 2px 6px rgba(91, 64, 30, 0.02);
   transition: all 0.25s ease;
 }
 .aos-flow-item:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   border-color: var(--aos-gold-soft);
-  box-shadow: 0 6px 16px rgba(169, 111, 23, 0.08);
+  box-shadow: 0 4px 10px rgba(169, 111, 23, 0.06);
   background: var(--aos-surface);
 }
 .aos-flow-item:not(:last-child)::after {
-  content: "›";
+  content: "↓";
   position: absolute;
-  right: -10px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 50%;
+  bottom: -18px;
+  transform: translateX(-50%);
   color: var(--aos-gold-soft);
-  font-size: 20px;
+  font-size: 14px;
   font-weight: 800;
   pointer-events: none;
 }
 .aos-flow-label {
   font-size: 11px;
   font-weight: 800;
-  color: var(--aos-ink);
+  color: var(--aos-gold);
 }
 .aos-flow-detail {
-  margin-top: 5px;
-  font-size: 8px;
+  font-size: 10px;
   color: var(--aos-ink-muted);
-  word-break: break-all;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .aos-heatmap-container {
@@ -702,6 +699,14 @@ button.aos-chat-send-btn:active {
   font-size: 9px;
   color: var(--aos-ink-muted);
   margin-top: 2px;
+}
+.aos-artifact-summary-block {
+  font-size: 10.5px;
+  color: var(--aos-ink);
+  margin-top: 4px;
+  margin-bottom: 4px;
+  line-height: 1.4;
+  white-space: pre-wrap;
 }
 .aos-task-meta {
   display: flex;

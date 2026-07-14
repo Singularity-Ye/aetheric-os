@@ -2159,14 +2159,15 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       if (artifact.status === "failed" || artifact.status === "delivery_failed") dot.addClass("is-error");
       const primary = row.createDiv({ cls: "aos-task-primary" });
       primary.createDiv({ cls: "aos-task-title", text: artifact.title });
-      const detail = [
-        artifact.kind,
-        artifact.status,
-        artifact.summary,
-        artifact.path,
-        new Date(artifact.createdAt).toLocaleString("zh-CN", { hour12: false }),
-      ].filter(Boolean).join(" · ");
-      primary.createDiv({ cls: "aos-task-detail", text: detail });
+      
+      if (artifact.summary) {
+        primary.createDiv({ cls: "aos-artifact-summary-block", text: artifact.summary });
+      }
+      
+      const timeStr = new Date(artifact.createdAt).toLocaleString("zh-CN", { hour12: false });
+      const metaStr = artifact.kind === "capture" ? `任务完成 · ${timeStr}` : timeStr;
+      primary.createDiv({ cls: "aos-task-detail", text: metaStr });
+
       if (artifact.sourceUrl) {
         const actions = row.createDiv({ cls: "aos-task-actions" });
         const button = actions.createEl("button", { cls: "aos-task-action-btn", text: "打开来源" });
