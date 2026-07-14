@@ -70,7 +70,6 @@ export default class ScriptoriumPlugin extends Plugin {
         this.nativeUi.apply(this.settings.nativeUiHidden);
       } else if (type === "markdown") {
         this.nativeUi.apply(false);
-        this.app.workspace.rightSplit.expand();
       } else {
         this.nativeUi.apply(false);
       }

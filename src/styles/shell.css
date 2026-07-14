@@ -679,3 +679,32 @@ button.aos-chat-send-btn:active {
 .aos-graph-canvas .graph-view-container {
   background-color: var(--background-primary) !important;
 }
+
+/* Translucent motion transition mask for graph scopes switching */
+.aos-graph-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: color-mix(in srgb, var(--aos-surface) 80%, transparent);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99;
+  opacity: 1;
+  transition: opacity 0.2s ease-in-out;
+}
+.aos-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(169, 111, 23, 0.12);
+  border-top-color: var(--aos-gold);
+  border-radius: 50%;
+  animation: aos-spin-rotation 0.75s linear infinite;
+}
+@keyframes aos-spin-rotation {
+  to { transform: rotate(360deg); }
+}

@@ -67,6 +67,7 @@ export class AethericShellView extends ItemView {
   private nativeGraphView: any = null;
   private nativeGraphLeaf: any = null;
   private currentRenderId = 0;
+  private readingLeafId: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: ScriptoriumPlugin) {
     super(leaf);
@@ -1099,6 +1100,47 @@ export class AethericShellView extends ItemView {
       }
 
       if (this.nativeGraphView) {
+        if (this.nativeGraphLeaf && this.nativeGraphLeaf.containerEl === canvas) {
+          const overlay = canvas.createDiv({ cls: "aos-graph-overlay" });
+          const spinner = overlay.createDiv({ cls: "aos-spinner" });
+          overlay.style.opacity = "0";
+          void overlay.offsetHeight;
+          overlay.style.opacity = "1";
+
+          if (tFile && typeof (this.nativeGraphView as any).setFile === "function") {
+            try {
+              (this.nativeGraphView as any).setFile(tFile);
+            } catch (e) {
+              console.warn("Failed to set file on existing graph view", e);
+            }
+          }
+          const graphState = {
+            file: tFile ? tFile.path : seedPath,
+            options: {
+              "collapse-filter": true,
+              "localJumps": 1,
+              "localBacklinks": true,
+              "localForelinks": true,
+              "showTags": this.graphScope === "current-tag",
+              ...currentOptions,
+              "search": searchQuery
+            }
+          };
+          await this.nativeGraphView.setState(graphState, { history: false });
+          if (abortIfStale()) {
+            overlay.remove();
+            return;
+          }
+          await new Promise<void>(resolve => window.setTimeout(resolve, 240));
+          if (abortIfStale()) {
+            overlay.remove();
+            return;
+          }
+          overlay.style.opacity = "0";
+          overlay.addEventListener("transitionend", () => overlay.remove());
+          return;
+        }
+
         const previousGraphView = this.nativeGraphView;
         try {
           const state = previousGraphView.getState();
@@ -1124,6 +1166,9 @@ export class AethericShellView extends ItemView {
       if (abortIfStale()) return;
 
       canvas.empty();
+      const overlay = canvas.createDiv({ cls: "aos-graph-overlay" });
+      const spinner = overlay.createDiv({ cls: "aos-spinner" });
+
       const graphView = viewCreator(nextGraphLeaf);
       ownedGraphView = graphView;
       nextGraphLeaf.view = graphView;
@@ -1136,7 +1181,10 @@ export class AethericShellView extends ItemView {
       graphView.load();
       if (typeof graphView.onOpen === "function") {
         await graphView.onOpen();
-        if (abortIfStale()) return;
+        if (abortIfStale()) {
+          overlay.remove();
+          return;
+        }
       }
 
       if (tFile && typeof (graphView as any).setFile === "function") {
@@ -1161,19 +1209,28 @@ export class AethericShellView extends ItemView {
       };
 
       await graphView.setState(graphState, { history: false });
-      if (abortIfStale()) return;
+      if (abortIfStale()) {
+        overlay.remove();
+        return;
+      }
 
       // LocalGraphView can fail silently: setState resolves, but its private
       // renderer never creates a usable canvas. Wait for layout, resize once,
       // then treat a missing/zero-sized canvas as a native-mount failure so the
       // SVG fallback remains a real safety net instead of dead code.
       await new Promise<void>(resolve => window.setTimeout(resolve, 160));
-      if (abortIfStale()) return;
+      if (abortIfStale()) {
+        overlay.remove();
+        return;
+      }
       if (graphView && typeof graphView.onResize === "function") {
         graphView.onResize();
       }
       await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
-      if (abortIfStale()) return;
+      if (abortIfStale()) {
+        overlay.remove();
+        return;
+      }
       const nativeCanvas = canvas.querySelector("canvas");
       const nativeBounds = nativeCanvas?.getBoundingClientRect();
       if (
@@ -1190,6 +1247,10 @@ export class AethericShellView extends ItemView {
       // Clear the diagnostic only after the renderer passes the visual-health
       // check, not merely after its state promise resolves.
       void this.app.vault.adapter.remove("graph_error.txt").catch(() => {});
+
+      // Fade out the cold boot overlay
+      overlay.style.opacity = "0";
+      overlay.addEventListener("transitionend", () => overlay.remove());
 
     } catch (err) {
       if (abortIfStale()) return;
@@ -1634,9 +1695,37 @@ export class AethericShellView extends ItemView {
       new Notice(`文件不存在：${node.path}`);
       return;
     }
-    const leaf = this.app.workspace.getLeaf("tab");
+
+    // 1. Prepare layout dimensions prior to loading document
+    this.plugin.nativeUi.apply(false);
+    this.app.workspace.rightSplit.expand();
+    // Wait for split drawer and ribbon animation frames to settle
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
+
+    // 2. Find or spawn dedicated Aetheric Reading Tab Leaf
+    let leaf: any = null;
+    if (this.readingLeafId) {
+      this.app.workspace.iterateAllLeaves(l => {
+        if ((l as any).id === this.readingLeafId) {
+          leaf = l;
+        }
+      });
+    }
+    if (!leaf) {
+      leaf = this.app.workspace.getLeaf("tab");
+      this.readingLeafId = (leaf as any).id;
+    }
+
+    // 3. Load note in tab
     await leaf.openFile(file);
-    this.plugin.logBus.append("success", "workspace.open", `已在原生编辑器打开：${node.path}`);
+
+    // 4. Focus active leaf
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
+
+    // 5. Stabilize outline metadata and editor properties rendering
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
+
+    this.plugin.logBus.append("success", "workspace.open", `已在原生编辑器和右侧大纲栏打开：${node.path}`);
   }
 
   private toggleFavorite(path: string): void {
