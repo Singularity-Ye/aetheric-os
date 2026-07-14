@@ -1696,6 +1696,17 @@ export class AethericShellView extends ItemView {
       return;
     }
 
+    const workspaceContainer = this.app.workspace.containerEl;
+    const mask = workspaceContainer.createDiv({ cls: "aos-page-transition-mask" });
+    mask.createDiv({ cls: "aos-spinner" });
+
+    const finishTransition = () => {
+      window.setTimeout(() => {
+        mask.style.opacity = "0";
+        mask.addEventListener("transitionend", () => mask.remove());
+      }, 180);
+    };
+
     // 1. If the file is already open in any workspace tab, switch to it immediately
     let existingLeaf: any = null;
     this.app.workspace.iterateAllLeaves(l => {
@@ -1707,7 +1718,8 @@ export class AethericShellView extends ItemView {
     if (existingLeaf) {
       this.app.workspace.setActiveLeaf(existingLeaf, { focus: true });
       this.app.workspace.rightSplit.expand();
-      this.plugin.logBus.append("success", "workspace.open", `已切换到已有标签页：${node.path}`);
+      this.plugin.logBus.append("success", "workspace.open", `已切换 to 已有标签页：${node.path}`);
+      finishTransition();
       return;
     }
 
@@ -1735,6 +1747,7 @@ export class AethericShellView extends ItemView {
     await leaf.openFile(file);
 
     this.plugin.logBus.append("success", "workspace.open", `已在原生编辑器和右侧大纲栏打开：${node.path}`);
+    finishTransition();
   }
 
   private toggleFavorite(path: string): void {

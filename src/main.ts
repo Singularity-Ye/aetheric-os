@@ -63,11 +63,28 @@ export default class ScriptoriumPlugin extends Plugin {
       if (!leaf || !this.store) return;
       const type = leaf.view.getViewType();
       if (type === AETHERIC_SHELL_VIEW) {
-        if (this.settings.nativeUiHidden) {
-          this.app.workspace.leftSplit.collapse();
-          this.app.workspace.rightSplit.collapse();
+        const workspaceContainer = this.app.workspace.containerEl;
+        if (!workspaceContainer.querySelector(".aos-page-transition-mask")) {
+          const mask = workspaceContainer.createDiv({ cls: "aos-page-transition-mask" });
+          mask.createDiv({ cls: "aos-spinner" });
+
+          if (this.settings.nativeUiHidden) {
+            this.app.workspace.leftSplit.collapse();
+            this.app.workspace.rightSplit.collapse();
+          }
+          this.nativeUi.apply(this.settings.nativeUiHidden);
+
+          window.setTimeout(() => {
+            mask.style.opacity = "0";
+            mask.addEventListener("transitionend", () => mask.remove());
+          }, 180);
+        } else {
+          if (this.settings.nativeUiHidden) {
+            this.app.workspace.leftSplit.collapse();
+            this.app.workspace.rightSplit.collapse();
+          }
+          this.nativeUi.apply(this.settings.nativeUiHidden);
         }
-        this.nativeUi.apply(this.settings.nativeUiHidden);
       } else if (type === "markdown") {
         this.nativeUi.apply(false);
       } else {
