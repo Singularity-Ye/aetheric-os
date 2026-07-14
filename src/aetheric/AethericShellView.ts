@@ -19,8 +19,11 @@ import {
   AethericWorkspace,
   GraphScope,
   IndexedFile,
+  IntelligenceItem,
   KnowledgeNodeViewModel,
+  OperationArtifact,
   OperationTask,
+  WorkspaceCapability,
 } from "./types";
 
 export const AETHERIC_SHELL_VIEW = "aetheric-os-shell-view";
@@ -139,7 +142,7 @@ export class AethericShellView extends ItemView {
     });
     this.unsubscribeHamasxiang = this.plugin.hamasxiangAdapter.subscribe(() => {
       const module = this.plugin.store.getSnapshot().activeModule;
-      if (module === "overview" || module === "collection" || module === "tasks") this.renderMain();
+      if (["overview", "collection", "tasks", "intelligence", "logs"].includes(module)) this.renderMain();
     });
 
     this.updateIndexStatus();
@@ -320,7 +323,7 @@ export class AethericShellView extends ItemView {
     this.renderNavigatorSection("Capabilities", workspace.capabilities.map(capability => ({
       title: capability.name,
       meta: capability.description ?? "长期能力",
-      action: () => this.activateCapability(capability.name),
+      action: () => this.activateCapability(capability),
     })));
 
     const quick = this.navigator.createDiv({ cls: "aos-nav-section" });
@@ -463,6 +466,7 @@ export class AethericShellView extends ItemView {
     else if (module === "navigation") this.renderNavigation();
     else if (module === "collection") this.renderCollection();
     else if (module === "tasks") this.renderTasks();
+    else if (module === "intelligence") this.renderIntelligence();
     else if (module === "knowledge") this.renderKnowledgeGraph();
     else if (module === "logs") this.renderLogsPage();
     else this.renderPlannedModule(module);
@@ -805,12 +809,39 @@ export class AethericShellView extends ItemView {
   }
 
   private renderLogsPage(): void {
+    const entries = this.plugin.logBus.getEntries();
+    const daemonEntries = entries.filter(entry => entry.source.startsWith("hamaxiang."));
     const page = this.mainPane.createDiv({ cls: "aos-page" });
     page.createDiv({ cls: "aos-page-title", text: "日志 Logs" });
     page.createDiv({ cls: "aos-page-subtitle", text: "统一日志坞站已在底部运行；可拖动、筛选、暂停跟随和最大化。" });
+
+    const metrics = page.createDiv({ cls: "aos-metric-grid" });
+    this.metric(metrics, "日志总数", `${entries.length}`, "当前内存窗口");
+    this.metric(metrics, "Daemon 日志", `${daemonEntries.length}`, "GET /logs 增量同步");
+    this.metric(metrics, "异常", `${entries.filter(entry => entry.level === "error").length}`, "error");
+    this.metric(metrics, "警告", `${entries.filter(entry => entry.level === "warn").length}`, "warn");
+
     const card = page.createDiv({ cls: "aos-panel" });
     card.createDiv({ cls: "aos-panel-title", text: "当前接入来源" });
-    card.createDiv({ cls: "aos-panel-note", text: "Shell 生命周期、导航、文件索引和松果阁旧工具。蛤蟆祥 Daemon 日志将在 Phase 4 通过 Adapter 接入。" });
+    card.createDiv({ cls: "aos-panel-note", text: "Shell 生命周期、导航、文件索引、松果阁旧工具，以及蛤蟆祥 Daemon 的任务与 X Watch 结构化事件。Daemon 日志按游标增量同步，不读取终端 DOM。" });
+
+    const recent = page.createDiv({ cls: "aos-panel" });
+    recent.createDiv({ cls: "aos-panel-title", text: "最近日志" });
+    const recentEntries = entries.slice(-30).reverse();
+    if (!recentEntries.length) {
+      recent.createDiv({ cls: "aos-empty-state", text: "当前还没有日志。" });
+    } else {
+      const list = recent.createDiv({ cls: "aos-task-list" });
+      for (const entry of recentEntries) {
+        const row = list.createDiv({ cls: "aos-task-row" });
+        const dot = row.createSpan({ cls: "aos-status-dot" });
+        if (entry.level === "error") dot.addClass("is-error");
+        else if (entry.level === "warn") dot.addClass("is-queued");
+        const primary = row.createDiv({ cls: "aos-task-primary" });
+        primary.createDiv({ cls: "aos-task-title", text: entry.message });
+        primary.createDiv({ cls: "aos-task-detail", text: `${entry.source} · ${new Date(entry.timestamp).toLocaleTimeString("zh-CN", { hour12: false })}` });
+      }
+    }
   }
 
   private renderCollection(): void {
@@ -825,7 +856,9 @@ export class AethericShellView extends ItemView {
     const intro = hero.createDiv();
     intro.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥 · 采集与情报引擎" });
     intro.createDiv({ cls: "aos-panel-note", text: "它现在是松果天工台的采集子系统；原控制台仍作为高级管理页保留。" });
-    hero.createSpan({ cls: `aos-service-badge ${snapshot.online ? "is-online" : "is-offline"}`, text: snapshot.online ? "本地炉火在线" : "本地炉火离线" });
+    const badge = hero.createSpan({ cls: `aos-service-badge ${snapshot.online ? "is-online" : "is-offline"}` });
+    badge.createSpan({ cls: "aos-badge-dot" });
+    badge.createSpan({ text: snapshot.online ? "本地炉火在线" : "本地炉火离线" });
 
     const metrics = page.createDiv({ cls: "aos-metric-grid aos-adapter-metrics" });
     this.metric(metrics, "Daemon", snapshot.online ? "在线" : "离线", snapshot.service);
@@ -845,6 +878,10 @@ export class AethericShellView extends ItemView {
     const tasks = page.createDiv({ cls: "aos-panel" });
     tasks.createDiv({ cls: "aos-panel-title", text: "采集任务快照" });
     this.renderTaskList(tasks, this.plugin.hamasxiangAdapter.getTasks(), false);
+
+    const artifacts = page.createDiv({ cls: "aos-panel" });
+    artifacts.createDiv({ cls: "aos-panel-title", text: "最近产物" });
+    this.renderArtifactList(artifacts, this.plugin.hamasxiangAdapter.getArtifacts().slice(0, 8));
   }
 
   private renderTasks(): void {
@@ -866,8 +903,36 @@ export class AethericShellView extends ItemView {
     this.renderTaskList(active, tasks, false);
 
     const honest = page.createDiv({ cls: "aos-panel" });
-    honest.createDiv({ cls: "aos-panel-title", text: "Phase 4 契约边界" });
-    honest.createDiv({ cls: "aos-panel-note", text: "UI 现在消费 OperationTask。后续只要 Daemon 暴露 /tasks 或 Agent 产物清单，adapter 可直接追加真实任务、步骤、产物与审批状态。" });
+    honest.createDiv({ cls: "aos-panel-title", text: "任务契约边界" });
+    honest.createDiv({ cls: "aos-panel-note", text: "当前任务来自 Daemon 的真实 JOBS 与 X Watch 状态。审批与 Agent 步骤仍未由后端提供，因此界面不会虚构这些字段。" });
+
+    const artifacts = page.createDiv({ cls: "aos-panel" });
+    artifacts.createDiv({ cls: "aos-panel-title", text: "产物与结果" });
+    this.renderArtifactList(artifacts, this.plugin.hamasxiangAdapter.getArtifacts());
+  }
+
+  private renderIntelligence(): void {
+    const snapshot = this.plugin.hamasxiangAdapter.getSnapshot();
+    const items = this.plugin.hamasxiangAdapter.getIntelligence();
+    const page = this.mainPane.createDiv({ cls: "aos-page aos-intelligence-page" });
+    const heading = page.createDiv({ cls: "aos-page-heading" });
+    heading.createDiv({ cls: "aos-page-title", text: "情报 Intelligence" });
+    heading.createDiv({ cls: "aos-page-subtitle", text: "读取 X Watch 与情报雷达的真实分类结果；不在 Shell 内重复运行爬虫" });
+
+    const metrics = page.createDiv({ cls: "aos-metric-grid" });
+    this.metric(metrics, "情报条目", `${items.length}`, "GET /intelligence");
+    this.metric(metrics, "高相关", `${items.filter(item => item.relevant).length}`, "classifier relevant");
+    this.metric(metrics, "需通知", `${items.filter(item => item.shouldNotify).length}`, "should_notify");
+    this.metric(metrics, "巡逻状态", this.xWatchLabel(snapshot.xWatch), snapshot.online ? "Daemon 在线" : "Daemon 离线");
+
+    const actions = page.createDiv({ cls: "aos-action-row" });
+    this.actionButton(actions, "刷新情报", () => void this.plugin.hamasxiangAdapter.refresh(true));
+    this.actionButton(actions, "立即巡逻 X", () => void this.runXWatch());
+    this.actionButton(actions, "打开蛤蟆祥指挥中心", () => void this.plugin.openHamasxiangConsole());
+
+    const panel = page.createDiv({ cls: "aos-panel" });
+    panel.createDiv({ cls: "aos-panel-title", text: "最近分类结果" });
+    this.renderIntelligenceList(panel, items);
   }
 
   private renderKnowledgeGraph(): void {
@@ -1543,9 +1608,9 @@ export class AethericShellView extends ItemView {
 
   private renderPlannedModule(module: AethericModule): void {
     const meta: Record<string, [string, string]> = {
-      collection: ["采集 Collection", "后台继续由蛤蟆祥运行；Phase 4 只迁移状态与操作入口。"],
-      tasks: ["任务 Tasks", "等待统一 TaskSnapshot 与真实审批状态接入。"],
-      intelligence: ["情报 Intelligence", "X Watch 与情报雷达数据将在 Phase 4 接入。"],
+      collection: ["采集 Collection", "通过 HamasxiangAdapter 消费本地 Daemon 状态与操作入口。"],
+      tasks: ["任务 Tasks", "统一消费 Daemon 的真实任务快照；未提供的审批状态保持为空。"],
+      intelligence: ["情报 Intelligence", "读取 X Watch 与情报雷达的真实分类结果。"],
       knowledge: ["知识库 Knowledge", "知识健康与五级动态图谱将在 Phase 5 接入。"],
       overview: ["总览", ""], navigation: ["导航", ""], logs: ["日志", ""],
     };
@@ -1610,9 +1675,31 @@ export class AethericShellView extends ItemView {
     }
   }
 
-  private activateCapability(name: string): void {
-    this.plugin.logBus.append("info", "capability.select", `选择能力：${name}`);
-    new Notice(`${name}：后台入口将在 Phase 4 通过 Adapter 接入`);
+  private activateCapability(capability: WorkspaceCapability): void {
+    this.plugin.logBus.append("info", "capability.select", `选择能力：${capability.name}`);
+    if (capability.id === "x-watch") {
+      this.switchModule("intelligence");
+      return;
+    }
+    if (capability.id === "cloud-sync" || capability.id === "asr-repair") {
+      void this.plugin.openHamasxiangConsole();
+      return;
+    }
+    if (capability.id === "publish") {
+      void this.plugin.openLegacyView();
+      return;
+    }
+    if (capability.id === "knowledge-health") {
+      this.switchModule("knowledge");
+      return;
+    }
+    if (capability.id === "course-import") {
+      this.switchModule("navigation");
+      new Notice("课程导入已定位到当前工作域；导入执行器尚未接入。");
+      return;
+    }
+    this.switchModule("navigation");
+    new Notice(`${capability.name} 已进入对应工作域；Agent 执行器尚未接入，不会生成虚假结果。`);
   }
 
   private handleCommandInput(): void {
@@ -1934,6 +2021,80 @@ export class AethericShellView extends ItemView {
       this.renderMain();
     }
     this.plugin.logBus.append("info", "navigation.favorite-folder", `${exists ? "取消收藏目录" : "收藏目录"}：${path}`);
+  }
+
+  private renderArtifactList(parent: HTMLElement, artifacts: readonly OperationArtifact[]): void {
+    if (!artifacts.length) {
+      parent.createDiv({ cls: "aos-empty-state", text: "尚无可观测产物。" });
+      return;
+    }
+    const list = parent.createDiv({ cls: "aos-task-list aos-artifact-list" });
+    for (const artifact of artifacts) {
+      const row = list.createDiv({ cls: "aos-task-row aos-artifact-row" });
+      const dot = row.createSpan({ cls: "aos-status-dot" });
+      if (artifact.status === "failed" || artifact.status === "delivery_failed") dot.addClass("is-error");
+      const primary = row.createDiv({ cls: "aos-task-primary" });
+      primary.createDiv({ cls: "aos-task-title", text: artifact.title });
+      const detail = [
+        artifact.kind,
+        artifact.status,
+        artifact.summary,
+        artifact.path,
+        new Date(artifact.createdAt).toLocaleString("zh-CN", { hour12: false }),
+      ].filter(Boolean).join(" · ");
+      primary.createDiv({ cls: "aos-task-detail", text: detail });
+      if (artifact.sourceUrl) {
+        const actions = row.createDiv({ cls: "aos-task-actions" });
+        const button = actions.createEl("button", { cls: "aos-task-action-btn", text: "打开来源" });
+        button.addEventListener("click", () => window.open(artifact.sourceUrl, "_blank", "noopener"));
+      }
+    }
+  }
+
+  private renderIntelligenceList(parent: HTMLElement, items: readonly IntelligenceItem[]): void {
+    if (!items.length) {
+      parent.createDiv({ cls: "aos-empty-state", text: "尚无情报分类结果；Daemon 离线时保留最近一次成功快照。" });
+      return;
+    }
+    const list = parent.createDiv({ cls: "aos-task-list aos-intelligence-list" });
+    for (const item of items) {
+      const row = list.createDiv({ cls: "aos-task-row aos-intelligence-row" });
+      if (item.relevant) row.addClass("is-relevant");
+      const dot = row.createSpan({ cls: "aos-status-dot" });
+      if (!item.relevant) dot.addClass("is-idle");
+      else if (item.shouldNotify) dot.addClass("is-running");
+      
+      const primary = row.createDiv({ cls: "aos-task-primary" });
+      const titleRow = primary.createDiv({ cls: "aos-task-title-row" });
+      titleRow.createSpan({ cls: "aos-task-title", text: item.title });
+      
+      if (item.relevant) {
+        titleRow.createSpan({ cls: "aos-core-badge", text: "★ 核心信号" });
+      }
+      
+      const detailContainer = primary.createDiv({ cls: "aos-task-detail-container" });
+      const metadataParts = [
+        item.author,
+        `信号 ${item.signalLevel}`,
+        item.confidence !== undefined ? `置信度 ${Math.round(item.confidence * 100)}%` : "",
+        item.summary,
+      ].filter(Boolean);
+      
+      detailContainer.createSpan({ cls: "aos-task-detail", text: metadataParts.join(" · ") });
+      
+      if (item.tags && item.tags.length > 0) {
+        const tagContainer = detailContainer.createDiv({ cls: "aos-intel-tag-container" });
+        item.tags.slice(0, 5).forEach(tag => {
+          tagContainer.createSpan({ cls: "aos-intel-tag", text: `#${tag}` });
+        });
+      }
+      
+      if (item.url) {
+        const actions = row.createDiv({ cls: "aos-task-actions" });
+        const button = actions.createEl("button", { cls: "aos-task-action-btn", text: "查看原文 ↗" });
+        button.addEventListener("click", () => window.open(item.url, "_blank", "noopener"));
+      }
+    }
   }
 
   private renderTaskList(parent: HTMLElement, tasks: OperationTask[], mini: boolean): void {

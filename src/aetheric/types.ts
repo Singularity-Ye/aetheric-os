@@ -124,6 +124,35 @@ export interface OperationTask {
   };
 }
 
+export type OperationArtifactKind = "capture" | "intelligence" | "note" | "report" | "other";
+
+export interface OperationArtifact {
+  id: string;
+  kind: OperationArtifactKind;
+  title: string;
+  status: string;
+  summary?: string;
+  sourceUrl?: string;
+  createdAt: number;
+  path?: string;
+}
+
+export interface IntelligenceItem {
+  id: string;
+  platform: string;
+  title: string;
+  summary?: string;
+  url?: string;
+  author?: string;
+  signalLevel: string;
+  confidence?: number;
+  relevant: boolean;
+  shouldNotify: boolean;
+  tags: string[];
+  capturedAt: number;
+  resultPath?: string;
+}
+
 export type GraphScope = "current-file" | "current-folder" | "current-workspace" | "current-tag" | "vault";
 
 export interface GraphNode {

@@ -154,3 +154,13 @@ npm run build
   - `当前目录`：精确生成 `path:"..."` 查询，节点收敛。
   - `当前工作域`：精确生成对应工作域路径组合的多 path 查询（如博德之门3工作域）。
   - `当前标签`：根据当前选中笔记的 tags 列表动态生成 `tag:#tag1 OR tag:#tag2` 关联图谱；若无 tags 则自动禁用并提示，防止空检索导致意外全库加载。
+
+### Phase 4 Adapter 真实数据管道补完
+
+- Daemon 新增只读 `/tasks`、`/artifacts`、`/intelligence` 和增量 `/logs` 端点。
+- `HamasxiangAdapter` 现在消费真实任务、最近产物、X Watch 分类结果和结构化 Daemon 日志。
+- 采集页展示真实任务与最近产物；任务页不再把健康状态冒充完整任务队列。
+- 情报页已替换占位内容，读取 `data/intel/results` 的真实分类结果。
+- Daemon 日志通过 cursor 增量汇入统一 `LogBus`；不读取终端 DOM，不轮询 Vault 文件。
+- 能力卡片已按现有真实入口路由；没有执行器的角色 BD、剧情路线和课程导入保持诚实提示。
+- 后端契约测试位于 `hamaxiang-system/test_phase4_api.py`，视觉交接边界见 `PHASE4_ADAPTER_HANDOFF.md`。

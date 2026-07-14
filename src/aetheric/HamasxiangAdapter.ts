@@ -1,5 +1,11 @@
 import { LogBus } from "./LogBus";
-import { OperationTask } from "./types";
+import {
+  IntelligenceItem,
+  LogLevel,
+  OperationArtifact,
+  OperationTask,
+  OperationTaskStatus,
+} from "./types";
 
 export interface HamasxiangXWatchSnapshot {
   enabled?: boolean;
@@ -21,6 +27,55 @@ export interface HamasxiangSnapshot {
   error?: string;
 }
 
+interface DaemonTaskRecord {
+  id?: string;
+  kind?: string;
+  status?: string;
+  title?: string;
+  url?: string;
+  error?: string;
+  evidence_level?: string;
+  delivered?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface DaemonArtifactRecord {
+  id?: string;
+  kind?: string;
+  title?: string;
+  status?: string;
+  summary?: string;
+  source_url?: string;
+  created_at?: string;
+  path?: string;
+}
+
+interface DaemonIntelligenceRecord {
+  id?: string;
+  platform?: string;
+  title?: string;
+  summary?: string;
+  url?: string;
+  author?: string;
+  signal_level?: string;
+  confidence?: number;
+  is_relevant?: boolean;
+  should_notify?: boolean;
+  tags?: unknown[];
+  captured_at?: string;
+  result_path?: string;
+}
+
+interface DaemonLogRecord {
+  id?: number;
+  timestamp?: number;
+  level?: string;
+  source?: string;
+  message?: string;
+  detail?: string;
+}
+
 const OFFLINE: HamasxiangSnapshot = {
   online: false,
   service: "hamaxiang-daemon",
@@ -31,6 +86,11 @@ const OFFLINE: HamasxiangSnapshot = {
 
 export class HamasxiangAdapter {
   private snapshot: HamasxiangSnapshot = { ...OFFLINE };
+  private daemonTasks: OperationTask[] = [];
+  private artifacts: OperationArtifact[] = [];
+  private intelligence: IntelligenceItem[] = [];
+  private logCursor = 0;
+  private resourceErrors = new Set<string>();
   private listeners = new Set<(snapshot: Readonly<HamasxiangSnapshot>) => void>();
   private refreshing: Promise<HamasxiangSnapshot> | null = null;
 
@@ -68,23 +128,21 @@ export class HamasxiangAdapter {
       progress: xWatchStatus === "running" ? 55 : snapshot.xWatch.last_success_at ? 100 : 0,
       updatedAt: checkedAt,
       nextRunAt: this.parseTime(snapshot.xWatch.next_run_at),
-      action: { label: snapshot.xWatch.running ? "查看来源" : "立即巡逻", command: snapshot.xWatch.running ? "open-hamasxiang-console" : "run-x-watch" },
+      action: {
+        label: snapshot.xWatch.running ? "查看来源" : "立即巡逻",
+        command: snapshot.xWatch.running ? "open-hamasxiang-console" : "run-x-watch",
+      },
     });
 
-    if (snapshot.activeJobs > 0 && !snapshot.xWatch.running) {
-      tasks.push({
-        id: "hamaxiang-active-jobs",
-        title: "后台采集任务",
-        source: "hamaxiang",
-        status: "running",
-        detail: `Daemon 报告 ${snapshot.activeJobs} 个活跃任务`,
-        progress: 35,
-        updatedAt: checkedAt,
-        action: { label: "打开来源", command: "open-hamasxiang-console" },
-      });
-    }
+    return [...tasks, ...this.daemonTasks];
+  }
 
-    return tasks;
+  getArtifacts(): readonly OperationArtifact[] {
+    return this.artifacts;
+  }
+
+  getIntelligence(): readonly IntelligenceItem[] {
+    return this.intelligence;
   }
 
   subscribe(listener: (snapshot: Readonly<HamasxiangSnapshot>) => void): () => void {
@@ -95,7 +153,7 @@ export class HamasxiangAdapter {
 
   refresh(verbose = false): Promise<HamasxiangSnapshot> {
     if (this.refreshing) return this.refreshing;
-    this.refreshing = this.fetchHealth(verbose).finally(() => {
+    this.refreshing = this.refreshAll(verbose).finally(() => {
       this.refreshing = null;
     });
     return this.refreshing;
@@ -113,12 +171,10 @@ export class HamasxiangAdapter {
     await this.refresh(false);
   }
 
-  private async fetchHealth(verbose: boolean): Promise<HamasxiangSnapshot> {
+  private async refreshAll(verbose: boolean): Promise<HamasxiangSnapshot> {
     const previousOnline = this.snapshot.online;
     try {
-      const response = await this.fetchWithTimeout(`${this.baseUrl}/health`, { method: "GET" }, 4000);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json() as Record<string, unknown>;
+      const data = await this.fetchJson<Record<string, unknown>>("/health", 4000);
       const xWatch = (data.x_watch && typeof data.x_watch === "object" ? data.x_watch : {}) as HamasxiangXWatchSnapshot;
       this.snapshot = {
         online: true,
@@ -129,14 +185,144 @@ export class HamasxiangAdapter {
         xWatch,
         checkedAt: Date.now(),
       };
-      if (verbose || !previousOnline) this.logBus.append("success", "hamaxiang.health", `本地炉火在线 · 活跃任务 ${this.snapshot.activeJobs}`);
+      if (verbose || !previousOnline) {
+        this.logBus.append("success", "hamaxiang.health", `本地炉火在线 · 活跃任务 ${this.snapshot.activeJobs}`);
+      }
+      await Promise.all([
+        this.refreshTasks(),
+        this.refreshArtifacts(),
+        this.refreshIntelligence(),
+        this.refreshLogs(),
+      ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.snapshot = { ...OFFLINE, checkedAt: Date.now(), error: message };
+      this.daemonTasks = [];
       if (verbose || previousOnline) this.logBus.append("warn", "hamaxiang.health", `本地炉火离线：${message}`);
     }
-    for (const listener of this.listeners) listener(this.snapshot);
+    this.emit();
     return this.snapshot;
+  }
+
+  private async refreshTasks(): Promise<void> {
+    try {
+      const data = await this.fetchJson<{ items?: DaemonTaskRecord[] }>("/tasks?limit=80", 4000);
+      const items = Array.isArray(data.items) ? data.items : [];
+      this.daemonTasks = items.map((item, index) => this.mapDaemonTask(item, index));
+      this.resourceErrors.delete("tasks");
+    } catch (error) {
+      this.logResourceError("tasks", error);
+    }
+  }
+
+  private async refreshArtifacts(): Promise<void> {
+    try {
+      const data = await this.fetchJson<{ items?: DaemonArtifactRecord[] }>("/artifacts?limit=50", 4000);
+      const items = Array.isArray(data.items) ? data.items : [];
+      this.artifacts = items.map((item, index) => ({
+        id: String(item.id ?? `artifact-${index}`),
+        kind: this.mapArtifactKind(item.kind),
+        title: String(item.title ?? "未命名产物"),
+        status: String(item.status ?? "unknown"),
+        summary: item.summary ? String(item.summary) : undefined,
+        sourceUrl: item.source_url ? String(item.source_url) : undefined,
+        createdAt: this.parseTime(item.created_at) ?? Date.now(),
+        path: item.path ? String(item.path) : undefined,
+      }));
+      this.resourceErrors.delete("artifacts");
+    } catch (error) {
+      this.logResourceError("artifacts", error);
+    }
+  }
+
+  private async refreshIntelligence(): Promise<void> {
+    try {
+      const data = await this.fetchJson<{ items?: DaemonIntelligenceRecord[] }>("/intelligence?limit=60", 4000);
+      const items = Array.isArray(data.items) ? data.items : [];
+      this.intelligence = items.map((item, index) => ({
+        id: String(item.id ?? `intel-${index}`),
+        platform: String(item.platform ?? "unknown"),
+        title: String(item.title ?? "未命名情报"),
+        summary: item.summary ? String(item.summary) : undefined,
+        url: item.url ? String(item.url) : undefined,
+        author: item.author ? String(item.author) : undefined,
+        signalLevel: String(item.signal_level ?? "unknown"),
+        confidence: typeof item.confidence === "number" ? item.confidence : undefined,
+        relevant: item.is_relevant === true,
+        shouldNotify: item.should_notify === true,
+        tags: Array.isArray(item.tags) ? item.tags.map(tag => String(tag)) : [],
+        capturedAt: this.parseTime(item.captured_at) ?? Date.now(),
+        resultPath: item.result_path ? String(item.result_path) : undefined,
+      }));
+      this.resourceErrors.delete("intelligence");
+    } catch (error) {
+      this.logResourceError("intelligence", error);
+    }
+  }
+
+  private async refreshLogs(): Promise<void> {
+    try {
+      const data = await this.fetchJson<{ items?: DaemonLogRecord[]; cursor?: number }>(
+        `/logs?after=${this.logCursor}&limit=200`,
+        4000,
+      );
+      const items = Array.isArray(data.items) ? data.items : [];
+      for (const item of items) {
+        const message = [item.message, item.detail].filter(Boolean).join(" · ");
+        if (!message) continue;
+        this.logBus.append(this.mapLogLevel(item.level), String(item.source ?? "hamaxiang.daemon"), message);
+      }
+      if (typeof data.cursor === "number" && Number.isFinite(data.cursor)) this.logCursor = data.cursor;
+      this.resourceErrors.delete("logs");
+    } catch (error) {
+      this.logResourceError("logs", error);
+    }
+  }
+
+  private mapDaemonTask(item: DaemonTaskRecord, index: number): OperationTask {
+    const status = this.mapDaemonTaskStatus(item.status);
+    const parts = [item.kind ?? "capture-douyin"];
+    if (item.evidence_level) parts.push(item.evidence_level);
+    if (item.error) parts.push(item.error);
+    else if (item.url) parts.push(item.url);
+    return {
+      id: `hamaxiang-job-${item.id ?? index}`,
+      title: String(item.title || item.url || item.id || "Daemon 任务"),
+      source: "hamaxiang",
+      status,
+      detail: parts.join(" · "),
+      progress: status === "queued" ? 10 : status === "running" ? 55 : status === "success" ? 100 : 0,
+      updatedAt: this.parseTime(item.updated_at) ?? this.parseTime(item.created_at) ?? Date.now(),
+      action: { label: "打开来源", command: "open-hamasxiang-console" },
+    };
+  }
+
+  private mapDaemonTaskStatus(status: string | undefined): OperationTaskStatus {
+    if (status === "queued" || status === "running") return status;
+    if (status === "completed") return "success";
+    if (status === "failed" || status === "delivery_failed") return "failed";
+    return "unknown";
+  }
+
+  private mapArtifactKind(kind: string | undefined): OperationArtifact["kind"] {
+    if (kind === "capture" || kind === "intelligence" || kind === "note" || kind === "report") return kind;
+    return "other";
+  }
+
+  private mapLogLevel(level: string | undefined): LogLevel {
+    if (level === "success" || level === "warn" || level === "error") return level;
+    return "info";
+  }
+
+  private logResourceError(resource: string, error: unknown): void {
+    if (this.resourceErrors.has(resource)) return;
+    this.resourceErrors.add(resource);
+    const message = error instanceof Error ? error.message : String(error);
+    this.logBus.append("warn", `hamaxiang.${resource}`, `附属数据刷新失败：${message}`);
+  }
+
+  private emit(): void {
+    for (const listener of this.listeners) listener(this.snapshot);
   }
 
   private mapXWatchStatus(xWatch: HamasxiangXWatchSnapshot): OperationTask["status"] {
@@ -162,6 +348,12 @@ export class HamasxiangAdapter {
     if (!value) return undefined;
     const timestamp = Date.parse(value);
     return Number.isFinite(timestamp) ? timestamp : undefined;
+  }
+
+  private async fetchJson<T>(path: string, timeoutMs: number): Promise<T> {
+    const response = await this.fetchWithTimeout(`${this.baseUrl}${path}`, { method: "GET" }, timeoutMs);
+    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+    return await response.json() as T;
   }
 
   private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
