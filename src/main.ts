@@ -86,7 +86,28 @@ export default class ScriptoriumPlugin extends Plugin {
           this.nativeUi.apply(this.settings.nativeUiHidden);
         }
       } else if (type === "markdown") {
-        this.nativeUi.apply(false);
+        const isRightCollapsed = (this.app.workspace.rightSplit as any).collapsed;
+        const workspaceContainer = this.app.workspace.containerEl;
+
+        if (isRightCollapsed) {
+          if (!workspaceContainer.querySelector(".aos-page-transition-mask")) {
+            const mask = workspaceContainer.createDiv({ cls: "aos-page-transition-mask" });
+            mask.createDiv({ cls: "aos-spinner" });
+
+            this.nativeUi.apply(false);
+            this.app.workspace.rightSplit.expand();
+
+            window.setTimeout(() => {
+              mask.style.opacity = "0";
+              mask.addEventListener("transitionend", () => mask.remove());
+            }, 180);
+          } else {
+            this.nativeUi.apply(false);
+            this.app.workspace.rightSplit.expand();
+          }
+        } else {
+          this.nativeUi.apply(false);
+        }
       } else {
         this.nativeUi.apply(false);
       }
