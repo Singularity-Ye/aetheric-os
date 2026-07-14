@@ -12,6 +12,7 @@ import {
   setIcon,
 } from "obsidian";
 import ScriptoriumPlugin from "../main";
+import { CompatAdapter } from "./CompatAdapter";
 import { LogDock } from "./LogDock";
 import { VirtualFileList } from "./VirtualFileList";
 import {
@@ -720,8 +721,7 @@ export class AethericShellView extends ItemView {
     card.setAttribute("style", "padding: 12px; display: flex; flex-direction: column; gap: 12px;");
     
     // Check if Claudian plugin is enabled
-    const claudianPlugin = (this.app as any).plugins?.plugins?.["realclaudian"];
-    if (claudianPlugin) {
+    if (CompatAdapter.isClaudianAvailable(this.app)) {
       const chatSection = card.createDiv({ cls: "aos-agent-chat-mvp" });
       const chatTitle = chatSection.createDiv({ text: "💬 Claudian 智能协同对讲机 (已融合)" });
       chatTitle.setAttribute("style", "font-size: 11px; font-weight: bold; margin-bottom: 8px; color: var(--aos-gold);");
@@ -734,31 +734,33 @@ export class AethericShellView extends ItemView {
         }
         if (leaf && leaf.view) {
           // If view type matches but tabManager hasn't been initialized (onOpen has not run), force it
-          if (leaf.view.getViewType() === "claudian-view" && !(leaf.view as any).tabManager) {
+          if (leaf.view.getViewType() === "claudian-view" && !CompatAdapter.isClaudianViewInitialized(leaf)) {
             try {
-              await (leaf.view as any).onOpen();
+              if (typeof (leaf.view as any).onOpen === "function") {
+                await (leaf.view as any).onOpen();
+              }
             } catch (openErr) {
               console.warn("Manually triggering onOpen on ClaudianView failed", openErr);
             }
           }
 
-          // Update only Claudian's active tab context. A global file-open event would
-          // incorrectly tell every Obsidian plugin that the note was physically opened.
-          const activeTab = (leaf.view as any).getTabManager?.()?.getActiveTab?.();
-          activeTab?.ui?.fileContextManager?.setCurrentNote?.(node.path);
+          CompatAdapter.syncClaudianContext(this.app, node.path);
 
           this.restoreBorrowedClaudian();
-          this.borrowedClaudianEl = (leaf.view as any).contentEl;
-          this.borrowedClaudianLeaf = leaf;
-          
-          const embedContainer = chatSection.createDiv({ cls: "aos-claudian-embed" });
-          embedContainer.setAttribute("style", "height: 480px; display: flex; flex-direction: column; border: 1px solid var(--aos-border); border-radius: var(--aos-radius); overflow: hidden; background: var(--aos-surface-muted);");
-          embedContainer.appendChild((leaf.view as any).contentEl);
-          
-          if (typeof (leaf.view as any).onResize === "function") {
-            try { (leaf.view as any).onResize(); } catch(e) {}
+          const contentEl = CompatAdapter.getClaudianContentEl(leaf);
+          if (contentEl) {
+            this.borrowedClaudianEl = contentEl;
+            this.borrowedClaudianLeaf = leaf;
+            
+            const embedContainer = chatSection.createDiv({ cls: "aos-claudian-embed" });
+            embedContainer.setAttribute("style", "height: 480px; display: flex; flex-direction: column; border: 1px solid var(--aos-border); border-radius: var(--aos-radius); overflow: hidden; background: var(--aos-surface-muted);");
+            embedContainer.appendChild(contentEl);
+            
+            if (typeof (leaf.view as any).onResize === "function") {
+              try { (leaf.view as any).onResize(); } catch(e) {}
+            }
+            return;
           }
-          return;
         }
       } catch (e) {
         console.warn("Failed to embed Claudian view, falling back to local chat", e);
@@ -1381,12 +1383,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           void overlay.offsetHeight;
           overlay.style.opacity = "1";
 
-          if (viewType === "localgraph" && tFile && typeof (this.nativeGraphView as any).setFile === "function") {
-            try {
-              (this.nativeGraphView as any).setFile(tFile);
-            } catch (e) {
-              console.warn("Failed to set file on existing graph view", e);
-            }
+          if (viewType === "localgraph" && tFile) {
+            CompatAdapter.safeSetGraphFile(this.nativeGraphView, tFile);
           }
           const graphState = viewType === "localgraph" ? {
             file: tFile ? tFile.path : seedPath,
@@ -1413,7 +1411,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           };
           
           if (viewType === "localgraph") {
-            await this.nativeGraphView.setState(graphState, { history: false });
+            await CompatAdapter.safeSetGraphState(this.nativeGraphView, graphState);
             if (abortIfStale()) {
               overlay.remove();
               return;
@@ -1440,13 +1438,9 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         }
 
         const previousGraphView = this.nativeGraphView;
-        try {
-          const state = previousGraphView.getState();
-          if (state && state.options) {
-            currentOptions = state.options;
-          }
-        } catch (e) {
-          console.warn("Failed to preserve native graph settings", e);
+        const state = CompatAdapter.safeGetGraphState(previousGraphView);
+        if (state && state.options) {
+          currentOptions = state.options;
         }
 
         try {
@@ -1482,12 +1476,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         }
       }
 
-      if (viewType === "localgraph" && tFile && typeof (graphView as any).setFile === "function") {
-        try {
-          (graphView as any).setFile(tFile);
-        } catch (e) {
-          console.warn("Failed to set file on new graph view", e);
-        }
+      if (viewType === "localgraph" && tFile) {
+        CompatAdapter.safeSetGraphFile(graphView, tFile);
       }
 
       const graphState = viewType === "localgraph" ? {
@@ -1514,7 +1504,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         }
       };
 
-      await graphView.setState(graphState, { history: false });
+      await CompatAdapter.safeSetGraphState(graphView, graphState);
       if (abortIfStale()) {
         overlay.remove();
         return;

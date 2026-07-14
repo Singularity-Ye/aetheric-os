@@ -5,6 +5,7 @@ import { LogBus } from "./aetheric/LogBus";
 import { NativeUiService } from "./aetheric/NativeUiService";
 import { VaultIndexService } from "./aetheric/VaultIndexService";
 import { HamasxiangAdapter } from "./aetheric/HamasxiangAdapter";
+import { CompatAdapter } from "./aetheric/CompatAdapter";
 import { AethericShellState } from "./aetheric/types";
 import { ScriptoriumSettings, DEFAULT_SETTINGS, ScriptoriumSettingTab, mergeSettings } from "./settings";
 import { ScriptoriumDashboardView, SCRIPTORIUM_DASHBOARD_VIEW } from "./views/ScriptoriumDashboardView";
@@ -65,7 +66,7 @@ export default class ScriptoriumPlugin extends Plugin {
       id: "reload-obsidian-app",
       name: "重新加载 Obsidian 窗口 (Reload Window)",
       callback: () => {
-        (this.app as any).commands.executeCommandById("app:reload");
+        CompatAdapter.reloadObsidianWindow(this.app);
       },
     });
     this.addCommand({
