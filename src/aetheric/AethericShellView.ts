@@ -2690,7 +2690,14 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     // Food choice
     const foodRow = card.createDiv({ cls: "aos-life-food-recommend" });
-    foodRow.createSpan({ cls: "food-label", text: "🐸 今日食路推荐：" });
+    const frogFile = this.app.vault.getAbstractFileByPath("08_密室/生活计划/frog.png");
+    if (frogFile instanceof TFile) {
+      const frogImg = foodRow.createEl("img", { cls: "aos-life-food-frog-icon" });
+      frogImg.src = this.app.vault.getResourcePath(frogFile);
+    } else {
+      foodRow.createSpan({ cls: "food-label", text: "🐸 " });
+    }
+    foodRow.createSpan({ cls: "food-label", text: "今日食路推荐：" });
     const foodName = foodRow.createSpan({ cls: "food-name", text: foodChoice });
     const refreshBtn = foodRow.createEl("button", { cls: "aos-life-food-refresh-btn", text: "🔄", attr: { title: "换一个" } });
     refreshBtn.addEventListener("click", async () => {

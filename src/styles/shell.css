@@ -1168,6 +1168,15 @@ button.aos-chat-send-btn:active {
   font-size: 11px;
   margin-top: auto;
 }
+.aos-life-food-frog-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(169, 111, 23, 0.15);
+  background: white;
+  flex-shrink: 0;
+}
 .aos-life-food-recommend .food-label {
   color: var(--aos-ink-muted);
   font-weight: 500;
