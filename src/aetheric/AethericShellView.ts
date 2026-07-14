@@ -1143,6 +1143,10 @@ export class AethericShellView extends ItemView {
               "search": searchQuery
             }
           } : {
+            "collapse-filter": true,
+            ...currentOptions,
+            "showTags": this.graphScope === "current-tag",
+            "search": searchQuery,
             options: {
               "collapse-filter": true,
               ...currentOptions,
@@ -1238,6 +1242,10 @@ export class AethericShellView extends ItemView {
           "search": searchQuery
         }
       } : {
+        "collapse-filter": true,
+        ...currentOptions,
+        "showTags": this.graphScope === "current-tag",
+        "search": searchQuery,
         options: {
           "collapse-filter": true,
           ...currentOptions,
