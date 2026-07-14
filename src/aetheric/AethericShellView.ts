@@ -71,6 +71,7 @@ export class AethericShellView extends ItemView {
   private nativeGraphView: any = null;
   private nativeGraphLeaf: any = null;
   private currentRenderId = 0;
+  private agentRenderTx = 0;
   private borrowedClaudianEl: HTMLElement | null = null;
   private borrowedClaudianLeaf: any | null = null;
 
@@ -736,14 +737,23 @@ export class AethericShellView extends ItemView {
       const statusText = embedContainer.createDiv({ text: "正在唤醒 Claudian 对讲机...", cls: "aos-loading-text" });
       statusText.setAttribute("style", "font-size: 10px; color: var(--aos-ink-muted); margin-top: 10px;");
       
+      // Increment transaction counter and capture it locally
+      this.agentRenderTx++;
+      const tx = this.agentRenderTx;
+      
       // Asynchronously instantiate and mount Claudian view to bypass race conditions
       setTimeout(async () => {
         try {
+          if (tx !== this.agentRenderTx) return; // Stale transaction check
+          
           let leaf: any = this.app.workspace.getLeavesOfType("claudian-view")[0] || null;
           if (!leaf) {
             leaf = this.app.workspace.getRightLeaf(false);
             await leaf.setViewState({ type: "claudian-view", active: true });
           }
+          
+          if (tx !== this.agentRenderTx) return; // Double check after async leaf creation
+          
           if (leaf && leaf.view) {
             if (leaf.view.getViewType() === "claudian-view" && !CompatAdapter.isClaudianViewInitialized(leaf)) {
               try {
@@ -754,6 +764,8 @@ export class AethericShellView extends ItemView {
                 console.warn("Manually triggering onOpen on ClaudianView failed", openErr);
               }
             }
+            
+            if (tx !== this.agentRenderTx) return; // Double check after async onOpen
 
             CompatAdapter.syncClaudianContext(this.app, node.path);
 
@@ -775,9 +787,11 @@ export class AethericShellView extends ItemView {
           }
           throw new Error("Unable to retrieve Claudian content element");
         } catch (e) {
-          console.warn("Failed to embed Claudian view", e);
-          embedContainer.empty();
-          embedContainer.createDiv({ cls: "aos-empty-state", text: "无法嵌入 Claudian 视图，请确保 Claudian 插件已启用且未损坏。" });
+          if (tx === this.agentRenderTx) {
+            console.warn("Failed to embed Claudian view", e);
+            embedContainer.empty();
+            embedContainer.createDiv({ cls: "aos-empty-state", text: "无法嵌入 Claudian 视图，请确保 Claudian 插件已启用且未损坏。" });
+          }
         }
       }, 50);
       
@@ -1342,22 +1356,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
       const applyEmbeddedGraphSearch = (gv: any): void => {
         if (viewType !== "graph") return;
-        const engine = gv?.dataEngine;
-        if (
-          typeof engine?.setOptions !== "function"
-          || typeof engine?.requestUpdateSearch?.run !== "function"
-        ) {
-          throw new Error("Embedded global graph search engine is unavailable");
-        }
-
-        // Obsidian's updateSearch() reads the FilterOptions search control, not
-        // engine.options. setOptions() updates that control through the native
-        // option listener; run() flushes the built-in debouncer immediately.
-        engine.setOptions({
-          search: searchQuery,
-          showTags: scope === "current-tag",
-        });
-        engine.requestUpdateSearch.run();
+        CompatAdapter.safeApplyGraphSearch(gv, searchQuery, scope === "current-tag");
       };
       
       if (scope === "current-folder" && folderPath) {

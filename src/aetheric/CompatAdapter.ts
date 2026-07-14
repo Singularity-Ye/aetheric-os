@@ -42,7 +42,9 @@ export class CompatAdapter {
       for (const leaf of leaves) {
         const view = leaf.view as any;
         if (view) {
-          const activeTab = view.tabManager?.activeTab;
+          const activeTab = typeof view.getTabManager === "function"
+            ? view.getTabManager()?.getActiveTab()
+            : (view.tabManager?.activeTab || null);
           const fileContextManager = activeTab?.ui?.fileContextManager;
           if (fileContextManager && typeof fileContextManager.setCurrentNote === "function") {
             fileContextManager.setCurrentNote(notePath);
@@ -84,5 +86,20 @@ export class CompatAdapter {
       }
     }
     return null;
+  }
+
+  static safeApplyGraphSearch(graphView: any, searchQuery: string, showTags: boolean): void {
+    const engine = graphView?.dataEngine;
+    if (engine && typeof engine.setOptions === "function" && engine.requestUpdateSearch && typeof engine.requestUpdateSearch.run === "function") {
+      try {
+        engine.setOptions({
+          search: searchQuery,
+          showTags: showTags,
+        });
+        engine.requestUpdateSearch.run();
+      } catch (e) {
+        console.error("[CompatAdapter] Failed to apply graph search query", e);
+      }
+    }
   }
 }
