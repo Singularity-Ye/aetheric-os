@@ -954,156 +954,246 @@ button.aos-chat-send-btn:active {
   min-height: 290px;
   display: flex;
   flex-direction: column;
-  padding: 14px;
-  border-radius: var(--aos-radius);
-  background: var(--aos-surface);
-  border: 1px solid var(--aos-border-strong);
-  box-shadow: 0 4px 12px rgba(169, 111, 23, 0.03);
+  padding: 18px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--aos-surface) 94%, #fff) 0%, color-mix(in srgb, var(--aos-surface) 86%, #fff) 100%);
+  border: 1px solid rgba(169, 111, 23, 0.16);
+  box-shadow: 0 8px 24px rgba(169, 111, 23, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.theme-dark .aos-life-status-card,
+.theme-dark .aos-life-todo-card {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--aos-surface) 92%, #000) 0%, color-mix(in srgb, var(--aos-surface) 84%, #000) 100%);
+  border: 1px solid rgba(212, 175, 55, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .aos-life-date-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .aos-life-calendar-icon {
-  width: 48px;
-  height: 52px;
-  border: 1px solid var(--aos-border-strong);
-  border-radius: 8px;
+  width: 52px;
+  height: 56px;
+  border-radius: 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--aos-paper);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06), inset 0 -2px 0 rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--aos-border-strong);
+  position: relative;
 }
+.aos-life-calendar-icon::before,
+.aos-life-calendar-icon::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  width: 4px;
+  height: 8px;
+  background: #444;
+  border-radius: 2px;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
+  z-index: 2;
+}
+.aos-life-calendar-icon::before { left: 12px; }
+.aos-life-calendar-icon::after { right: 12px; }
+
 .aos-life-calendar-icon .month-tab {
-  background: linear-gradient(135deg, #d32f2f, #b71c1c);
+  background: linear-gradient(to bottom, #d32f2f 0%, #b71c1c 100%);
   color: #ffffff;
-  font-size: 9px;
-  font-weight: bold;
+  font-size: 10px;
+  font-weight: 800;
   text-align: center;
-  padding: 2px 0;
+  padding: 4px 0 2px 0;
+  letter-spacing: 1px;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
 }
 .aos-life-calendar-icon .day-num {
   flex: 1;
   display: grid;
   place-items: center;
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 22px;
+  font-weight: 900;
   color: var(--aos-ink);
   background: var(--aos-paper);
   line-height: 1;
+  font-family: inherit;
+}
+.aos-life-date-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 .aos-life-date-text .weekday {
-  font-size: 13px;
-  font-weight: bold;
+  font-size: 18px;
+  font-weight: 800;
   color: var(--aos-ink);
+  line-height: 1.2;
 }
 .aos-life-date-text .full-date {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--aos-ink-muted);
-  margin-top: 1px;
+  margin-top: 2px;
+  letter-spacing: 0.2px;
 }
 .aos-weather-widget {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  background: var(--aos-surface-muted);
-  border-radius: 8px;
-  border: 1px solid var(--aos-border);
-  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  color: #ffffff !important;
+  position: relative;
+  overflow: hidden;
+  border: none;
+}
+.aos-weather-widget.is-sunny {
+  background: linear-gradient(135deg, #f8a145 0%, #f06922 100%);
+}
+.aos-weather-widget.is-cloudy {
+  background: linear-gradient(135deg, #7c98b3 0%, #536c84 100%);
+}
+.aos-weather-widget.is-rainy {
+  background: linear-gradient(135deg, #4b7cb2 0%, #294c72 100%);
+}
+.aos-weather-widget.is-snowy {
+  background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+  color: #333333 !important;
 }
 .aos-weather-current {
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 .aos-weather-current .temp-val {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--aos-gold-dark, #a96f17);
+  font-size: 24px;
+  font-weight: 900;
+  color: inherit;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 .aos-weather-current .desc-val {
-  font-size: 10px;
-  color: var(--aos-ink);
-  font-weight: bold;
-  margin-top: 1px;
+  font-size: 11px;
+  font-weight: 700;
+  color: inherit;
+  opacity: 0.95;
 }
 .aos-weather-current .details-val {
-  font-size: 8px;
-  color: var(--aos-ink-muted);
-  margin-top: 1px;
+  font-size: 9px;
+  color: inherit;
+  opacity: 0.8;
 }
 .aos-weather-forecast {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   text-align: right;
-  border-left: 1px solid var(--aos-border);
-  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  padding-left: 14px;
+}
+.aos-weather-widget.is-snowy .aos-weather-forecast {
+  border-left-color: rgba(0, 0, 0, 0.1);
 }
 .aos-weather-forecast .forecast-day {
-  font-size: 9px;
+  font-size: 10px;
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
-  color: var(--aos-ink-muted);
+  gap: 8px;
+  color: inherit;
+  opacity: 0.9;
 }
 .aos-weather-forecast .forecast-day .day-name {
-  font-weight: bold;
-  color: var(--aos-ink);
+  font-weight: 800;
 }
 .aos-life-sub-title {
-  font-size: 11px;
-  font-weight: bold;
+  font-size: 12px;
+  font-weight: 800;
   color: var(--aos-ink-muted);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .aos-life-focus-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 16px;
   flex: 1;
 }
 .aos-life-focus-item {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--aos-ink);
-  background: rgba(169, 111, 23, 0.03);
-  padding: 5px 8px;
-  border-left: 2px solid var(--aos-gold);
-  border-radius: 0 4px 4px 0;
+  background: linear-gradient(to right, color-mix(in srgb, var(--aos-gold) 6%, transparent) 0%, transparent 100%);
+  padding: 8px 12px;
+  border-left: 3px solid var(--aos-gold);
+  border-radius: 4px;
+  border-top: 1px solid rgba(169, 111, 23, 0.05);
+  border-bottom: 1px solid rgba(169, 111, 23, 0.05);
+  border-right: 1px solid rgba(169, 111, 23, 0.05);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.aos-life-focus-item:hover {
+  transform: translateX(2px);
+  background: linear-gradient(to right, color-mix(in srgb, var(--aos-gold) 12%, transparent) 0%, transparent 100%);
+  border-color: rgba(169, 111, 23, 0.15);
+}
+.aos-life-focus-item.is-empty {
+  border: 1px dashed var(--aos-border-strong);
+  background: transparent;
+  color: var(--aos-ink-muted);
+  opacity: 0.75;
+}
+.aos-life-focus-item.is-empty:hover {
+  border-color: var(--aos-gold);
+  color: var(--aos-gold-dark, #a96f17);
+  background: rgba(169, 111, 23, 0.02);
+  transform: none;
 }
 .aos-life-food-recommend {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
   background: var(--aos-surface-muted);
-  border: 1px solid var(--aos-border);
-  font-size: 9px;
+  border: 1px solid var(--aos-border-strong);
+  font-size: 11px;
+  margin-top: auto;
 }
 .aos-life-food-recommend .food-label {
   color: var(--aos-ink-muted);
+  font-weight: 500;
 }
 .aos-life-food-recommend .food-name {
-  font-weight: bold;
+  font-weight: 800;
   color: var(--aos-gold-dark, #a96f17);
 }
 .aos-life-food-refresh-btn {
   border: none;
   background: none;
   cursor: pointer;
-  padding: 2px;
-  font-size: 9px;
-  transition: transform 0.4s ease;
+  padding: 4px;
+  font-size: 11px;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   margin-left: auto;
+  color: var(--aos-ink-muted);
+  display: flex;
+  align-items: center;
+}
+.aos-life-food-refresh-btn:hover {
+  color: var(--aos-gold);
+  transform: scale(1.1);
 }
 .aos-life-food-refresh-btn.is-spinning {
-  transform: rotate(360deg);
+  transform: rotate(360deg) scale(1.1);
 }
 
 /* Right card: Todo list styling */
@@ -1111,27 +1201,61 @@ button.aos-chat-send-btn:active {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   overflow-y: auto;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   padding-right: 4px;
 }
 .aos-life-todo-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--aos-surface-muted);
+  border: 1px solid var(--aos-border);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+.aos-life-todo-row:hover {
+  border-color: rgba(169, 111, 23, 0.2);
+  background: var(--aos-surface);
+  box-shadow: 0 2px 8px rgba(169, 111, 23, 0.02);
 }
 .aos-life-todo-cb {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--aos-gold);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--aos-border-strong);
+  border-radius: 50%;
+  outline: none;
   cursor: pointer;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  background: var(--aos-paper);
+  flex-shrink: 0;
+}
+.aos-life-todo-cb:checked {
+  background: var(--aos-gold);
+  border-color: var(--aos-gold);
+  transform: scale(1.05);
+}
+.aos-life-todo-cb:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 10px;
+  font-weight: 900;
 }
 .aos-life-todo-label {
   font-size: 11px;
   color: var(--aos-ink);
+  font-weight: 500;
   transition: all 0.2s ease;
+  line-height: 1.4;
 }
 .aos-life-todo-label.is-completed {
   color: var(--aos-ink-muted);
@@ -1141,26 +1265,29 @@ button.aos-chat-send-btn:active {
 .aos-life-input-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  border-top: 1px dashed var(--aos-border);
-  padding-top: 10px;
+  gap: 10px;
+  border-top: 1px dashed var(--aos-border-strong);
+  padding-top: 14px;
+  margin-top: auto;
 }
 .aos-life-todo-input,
 .aos-life-inspiration-input {
-  height: 26px;
-  padding: 0 8px;
-  font-size: 10px;
-  border-radius: 4px;
-  border: 1px solid var(--aos-border);
+  height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+  border-radius: 8px;
+  border: 1px solid var(--aos-border-strong);
   background: var(--aos-surface-muted);
   color: var(--aos-ink);
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 .aos-life-todo-input:focus,
 .aos-life-inspiration-input:focus {
   outline: none;
   border-color: var(--aos-gold);
   background: var(--aos-paper);
+  box-shadow: 0 0 0 3px rgba(169, 111, 23, 0.12);
 }
 .aos-spinner-small {
   width: 16px;

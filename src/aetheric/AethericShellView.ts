@@ -2534,13 +2534,13 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     this.renderOverview();
   }
 
-  private async loadThreeFocusItems(): Promise<string[]> {
+  private async loadThreeFocusItems(): Promise<Array<{ completed: boolean; text: string }>> {
     const path = "08_密室/林下工作台.md";
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof TFile)) return ["⏳ (未配置焦点)", "⏳ (未配置焦点)", "⏳ (未配置焦点)"];
+    if (!(file instanceof TFile)) return [{ completed: false, text: "" }, { completed: false, text: "" }, { completed: false, text: "" }];
     const content = await this.app.vault.read(file);
     const lines = content.split(/\r?\n/);
-    const items: string[] = [];
+    const items = [];
     let inThreeThings = false;
     for (const line of lines) {
       if (line.includes("### 今日三件事")) {
@@ -2554,13 +2554,13 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         const match = line.match(/^\s*-\s*\[([ xX])\]\s*(.*)$/);
         if (match) {
           const completed = match[1].toLowerCase() === "x";
-          const text = match[2].trim() || "(空焦点)";
-          items.push(`${completed ? "✅" : "⏳"} ${text}`);
+          const text = match[2].trim();
+          items.push({ completed, text });
         }
         if (items.length >= 3) break;
       }
     }
-    while (items.length < 3) items.push("⏳ (空焦点)");
+    while (items.length < 3) items.push({ completed: false, text: "" });
     return items;
   }
 
@@ -2617,7 +2617,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     });
   }
 
-  private populateLifeStatus(card: HTMLDivElement, weather: any, focusItems: string[], foodChoice: string): void {
+  private populateLifeStatus(card: HTMLDivElement, weather: any, focusItems: Array<{ completed: boolean; text: string }>, foodChoice: string): void {
     card.empty();
     card.createDiv({ cls: "aos-panel-title", text: "🏡 林下今日状态" });
 
@@ -2645,7 +2645,17 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       const feels = current.FeelsLikeC || "--";
       const humidity = current.humidity || "--";
 
-      const weatherWidget = card.createDiv({ cls: "aos-weather-widget" });
+      const descLower = desc.toLowerCase();
+      let weatherClass = "is-cloudy";
+      if (descLower.includes("sun") || descLower.includes("clear")) {
+        weatherClass = "is-sunny";
+      } else if (descLower.includes("rain") || descLower.includes("shower") || descLower.includes("drizzle")) {
+        weatherClass = "is-rainy";
+      } else if (descLower.includes("snow") || descLower.includes("ice")) {
+        weatherClass = "is-snowy";
+      }
+
+      const weatherWidget = card.createDiv({ cls: `aos-weather-widget ${weatherClass}` });
       const currentEl = weatherWidget.createDiv({ cls: "aos-weather-current" });
       currentEl.createDiv({ cls: "temp-val", text: `${temp}°C` });
       currentEl.createDiv({ cls: "desc-val", text: `${desc} (体感 ${feels}°C)` });
@@ -2665,9 +2675,18 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     // Today's Focus
     card.createDiv({ cls: "aos-life-sub-title", text: "🎯 今日三件事" });
     const focusContainer = card.createDiv({ cls: "aos-life-focus-list" });
-    for (const item of focusItems) {
-      focusContainer.createDiv({ cls: "aos-life-focus-item", text: item });
-    }
+    focusItems.forEach((item, index) => {
+      const itemEl = focusContainer.createDiv({ cls: "aos-life-focus-item" });
+      if (!item.text) {
+        itemEl.classList.add("is-empty");
+        itemEl.textContent = `🎯 设定第 ${index + 1} 件今日要事...`;
+      } else {
+        itemEl.textContent = `${item.completed ? "✅" : "⏳"} ${item.text}`;
+      }
+      itemEl.addEventListener("click", () => {
+        this.openFileByPath("08_密室/林下工作台.md");
+      });
+    });
 
     // Food choice
     const foodRow = card.createDiv({ cls: "aos-life-food-recommend" });
@@ -2680,6 +2699,16 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       foodName.textContent = newFood;
       setTimeout(() => refreshBtn.classList.remove("is-spinning"), 600);
     });
+  }
+
+  private openFileByPath(path: string): void {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (file instanceof TFile) {
+      const leaf = this.app.workspace.getLeaf(false);
+      void leaf.openFile(file);
+    } else {
+      new Notice(`文件不存在: ${path}`);
+    }
   }
 
   private populateLifeTodo(card: HTMLDivElement, todos: any[]): void {
