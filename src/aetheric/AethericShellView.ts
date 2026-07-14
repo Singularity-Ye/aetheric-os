@@ -1223,10 +1223,12 @@ export class AethericShellView extends ItemView {
             }
           };
           
-          await this.nativeGraphView.setState(graphState, { history: false });
-          if (abortIfStale()) {
-            overlay.remove();
-            return;
+          if (viewType === "localgraph") {
+            await this.nativeGraphView.setState(graphState, { history: false });
+            if (abortIfStale()) {
+              overlay.remove();
+              return;
+            }
           }
           applyEmbeddedGraphSearch(this.nativeGraphView);
           await new Promise<void>(resolve => window.setTimeout(resolve, 240));
