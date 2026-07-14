@@ -723,49 +723,65 @@ export class AethericShellView extends ItemView {
     // Check if Claudian plugin is enabled
     if (CompatAdapter.isClaudianAvailable(this.app)) {
       const chatSection = card.createDiv({ cls: "aos-agent-chat-mvp" });
+      chatSection.setAttribute("style", "display: flex; flex-direction: column; flex-grow: 1;");
+      
       const chatTitle = chatSection.createDiv({ text: "💬 Claudian 智能协同对讲机 (已融合)" });
       chatTitle.setAttribute("style", "font-size: 11px; font-weight: bold; margin-bottom: 8px; color: var(--aos-gold);");
       
-      try {
-        let leaf: any = this.app.workspace.getLeavesOfType("claudian-view")[0] || null;
-        if (!leaf) {
-          leaf = this.app.workspace.getRightLeaf(false);
-          await leaf.setViewState({ type: "claudian-view", active: true });
-        }
-        if (leaf && leaf.view) {
-          // If view type matches but tabManager hasn't been initialized (onOpen has not run), force it
-          if (leaf.view.getViewType() === "claudian-view" && !CompatAdapter.isClaudianViewInitialized(leaf)) {
-            try {
-              if (typeof (leaf.view as any).onOpen === "function") {
-                await (leaf.view as any).onOpen();
+      const embedContainer = chatSection.createDiv({ cls: "aos-claudian-embed" });
+      embedContainer.setAttribute("style", "height: 520px; display: flex; flex-direction: column; border: 1px solid var(--aos-border); border-radius: var(--aos-radius); overflow: hidden; background: var(--aos-surface-muted); justify-content: center; align-items: center; position: relative;");
+      
+      // Spinner loader
+      const loader = embedContainer.createDiv({ cls: "aos-spinner" });
+      const statusText = embedContainer.createDiv({ text: "正在唤醒 Claudian 对讲机...", cls: "aos-loading-text" });
+      statusText.setAttribute("style", "font-size: 10px; color: var(--aos-ink-muted); margin-top: 10px;");
+      
+      // Asynchronously instantiate and mount Claudian view to bypass race conditions
+      setTimeout(async () => {
+        try {
+          let leaf: any = this.app.workspace.getLeavesOfType("claudian-view")[0] || null;
+          if (!leaf) {
+            leaf = this.app.workspace.getRightLeaf(false);
+            await leaf.setViewState({ type: "claudian-view", active: true });
+          }
+          if (leaf && leaf.view) {
+            if (leaf.view.getViewType() === "claudian-view" && !CompatAdapter.isClaudianViewInitialized(leaf)) {
+              try {
+                if (typeof (leaf.view as any).onOpen === "function") {
+                  await (leaf.view as any).onOpen();
+                }
+              } catch (openErr) {
+                console.warn("Manually triggering onOpen on ClaudianView failed", openErr);
               }
-            } catch (openErr) {
-              console.warn("Manually triggering onOpen on ClaudianView failed", openErr);
+            }
+
+            CompatAdapter.syncClaudianContext(this.app, node.path);
+
+            this.restoreBorrowedClaudian();
+            const contentEl = CompatAdapter.getClaudianContentEl(leaf);
+            if (contentEl) {
+              this.borrowedClaudianEl = contentEl;
+              this.borrowedClaudianLeaf = leaf;
+              
+              embedContainer.empty();
+              embedContainer.appendChild(contentEl);
+              embedContainer.setAttribute("style", "height: 520px; display: flex; flex-direction: column; border: 1px solid var(--aos-border); border-radius: var(--aos-radius); overflow: hidden; background: var(--aos-surface-muted);");
+              
+              if (typeof (leaf.view as any).onResize === "function") {
+                try { (leaf.view as any).onResize(); } catch(e) {}
+              }
+              return;
             }
           }
-
-          CompatAdapter.syncClaudianContext(this.app, node.path);
-
-          this.restoreBorrowedClaudian();
-          const contentEl = CompatAdapter.getClaudianContentEl(leaf);
-          if (contentEl) {
-            this.borrowedClaudianEl = contentEl;
-            this.borrowedClaudianLeaf = leaf;
-            
-            const embedContainer = chatSection.createDiv({ cls: "aos-claudian-embed" });
-            embedContainer.setAttribute("style", "height: 480px; display: flex; flex-direction: column; border: 1px solid var(--aos-border); border-radius: var(--aos-radius); overflow: hidden; background: var(--aos-surface-muted);");
-            embedContainer.appendChild(contentEl);
-            
-            if (typeof (leaf.view as any).onResize === "function") {
-              try { (leaf.view as any).onResize(); } catch(e) {}
-            }
-            return;
-          }
+          throw new Error("Unable to retrieve Claudian content element");
+        } catch (e) {
+          console.warn("Failed to embed Claudian view", e);
+          embedContainer.empty();
+          embedContainer.createDiv({ cls: "aos-empty-state", text: "无法嵌入 Claudian 视图，请确保 Claudian 插件已启用且未损坏。" });
         }
-      } catch (e) {
-        console.warn("Failed to embed Claudian view, falling back to local chat", e);
-        chatSection.createDiv({ cls: "aos-empty-state", text: "无法嵌入 Claudian 视图，已切换回离线留言模式。" });
-      }
+      }, 50);
+      
+      return;
     }
 
     // 1. Last Agent Run History (If any)
