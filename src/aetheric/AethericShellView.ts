@@ -67,7 +67,6 @@ export class AethericShellView extends ItemView {
   private nativeGraphView: any = null;
   private nativeGraphLeaf: any = null;
   private currentRenderId = 0;
-  private readingLeafId: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: ScriptoriumPlugin) {
     super(leaf);
@@ -1723,19 +1722,8 @@ export class AethericShellView extends ItemView {
       return;
     }
 
-    // 2. Find or spawn dedicated Aetheric Reading Tab Leaf
-    let leaf: any = null;
-    if (this.readingLeafId) {
-      this.app.workspace.iterateAllLeaves(l => {
-        if ((l as any).id === this.readingLeafId) {
-          leaf = l;
-        }
-      });
-    }
-    if (!leaf) {
-      leaf = this.app.workspace.getLeaf("tab");
-      this.readingLeafId = (leaf as any).id;
-    }
+    // 2. Spawn a new tab leaf
+    const leaf = this.app.workspace.getLeaf("tab");
 
     // 3. Switch to the target tab first for instant visual feedback and UI restoration
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
