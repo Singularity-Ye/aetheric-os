@@ -107,7 +107,8 @@ export default class ScriptoriumPlugin extends Plugin {
 
           window.setTimeout(() => {
             mask.style.opacity = "0";
-            mask.addEventListener("transitionend", () => mask.remove());
+            mask.style.pointerEvents = "none";
+            window.setTimeout(() => mask.remove(), 250);
           }, 180);
         } else {
           if (this.settings.nativeUiHidden) {
@@ -130,7 +131,8 @@ export default class ScriptoriumPlugin extends Plugin {
 
             window.setTimeout(() => {
               mask.style.opacity = "0";
-              mask.addEventListener("transitionend", () => mask.remove());
+              mask.style.pointerEvents = "none";
+              window.setTimeout(() => mask.remove(), 250);
             }, 180);
           } else {
             this.nativeUi.apply(false);
