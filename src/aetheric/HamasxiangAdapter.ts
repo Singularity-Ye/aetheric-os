@@ -94,7 +94,15 @@ export class HamasxiangAdapter {
   private listeners = new Set<(snapshot: Readonly<HamasxiangSnapshot>) => void>();
   private refreshing: Promise<HamasxiangSnapshot> | null = null;
 
-  constructor(private logBus: LogBus, private baseUrl = "http://127.0.0.1:8765") {}
+  constructor(
+    private logBus: LogBus,
+    private baseUrl = "http://127.0.0.1:8765",
+    private authToken = "",
+  ) {}
+
+  setAuthToken(token: string): void {
+    this.authToken = token.trim();
+  }
 
   getSnapshot(): Readonly<HamasxiangSnapshot> {
     return this.snapshot;
@@ -160,6 +168,9 @@ export class HamasxiangAdapter {
   }
 
   async runXWatch(): Promise<void> {
+    if (!this.authToken) {
+      throw new Error("请先在天工台设置中配置蛤蟆祥 Daemon Token");
+    }
     const response = await this.fetchWithTimeout(`${this.baseUrl}/x-watch/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -359,10 +370,8 @@ export class HamasxiangAdapter {
   private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-    const headers = {
-      ...(init.headers || {}),
-      "Authorization": "Bearer mind_kv_233233"
-    };
+    const headers = new Headers(init.headers);
+    if (this.authToken) headers.set("Authorization", `Bearer ${this.authToken}`);
     try {
       return await fetch(url, { ...init, headers, signal: controller.signal });
     } finally {

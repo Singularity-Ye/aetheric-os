@@ -94,6 +94,7 @@ export class AethericShellView extends ItemView {
     this.contentEl.addClass("aos-view-content");
     this.root = this.contentEl.createDiv({ cls: "aos-shell" });
     this.root.addEventListener("mousedown", (e: MouseEvent) => {
+      if (e.target instanceof Element && e.target.closest(".aos-claudian-embed")) return;
       if (e.button === 3) {
         e.preventDefault();
         this.navigateHistory(-1);
@@ -171,6 +172,10 @@ export class AethericShellView extends ItemView {
     if (this.nativeGraphView && typeof this.nativeGraphView.onResize === "function") {
       this.nativeGraphView.onResize();
     }
+  }
+
+  getSelectedNodePath(): string | null {
+    return this.selectedNode?.path ?? this.plugin.store.getSnapshot().selectedFilePath;
   }
 
   selectFolder(folderPath: string, pushHistory = true): void {
@@ -722,12 +727,6 @@ export class AethericShellView extends ItemView {
       chatTitle.setAttribute("style", "font-size: 11px; font-weight: bold; margin-bottom: 8px; color: var(--aos-gold);");
       
       try {
-        // Sync active file context to Claudian by triggering Obsidian's native file-open event
-        const file = this.app.vault.getAbstractFileByPath(node.path);
-        if (file && (file as any).extension === "md") {
-          this.app.workspace.trigger("file-open", file);
-        }
-
         let leaf: any = this.app.workspace.getLeavesOfType("claudian-view")[0] || null;
         if (!leaf) {
           leaf = this.app.workspace.getRightLeaf(false);
@@ -742,6 +741,11 @@ export class AethericShellView extends ItemView {
               console.warn("Manually triggering onOpen on ClaudianView failed", openErr);
             }
           }
+
+          // Update only Claudian's active tab context. A global file-open event would
+          // incorrectly tell every Obsidian plugin that the note was physically opened.
+          const activeTab = (leaf.view as any).getTabManager?.()?.getActiveTab?.();
+          activeTab?.ui?.fileContextManager?.setCurrentNote?.(node.path);
 
           this.restoreBorrowedClaudian();
           this.borrowedClaudianEl = (leaf.view as any).contentEl;

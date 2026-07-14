@@ -164,3 +164,14 @@ npm run build
 - Daemon 日志通过 cursor 增量汇入统一 `LogBus`；不读取终端 DOM，不轮询 Vault 文件。
 - 能力卡片已按现有真实入口路由；没有执行器的角色 BD、剧情路线和课程导入保持诚实提示。
 - 后端契约测试位于 `hamaxiang-system/test_phase4_api.py`，视觉交接边界见 `PHASE4_ADAPTER_HANDOFF.md`。
+
+### v1.3.3 节点快捷键、Claudian 上下文与鉴权收口
+
+- 新增 Obsidian 命令“复制当前节点的 Vault 相对路径”，默认快捷键为 `Ctrl+Shift+C`；复制对象是天工台当前选中的节点，不依赖顶部原生 Markdown 标签页。
+- 快捷键在输入框、可编辑区域和 Claudian 嵌入终端聚焦时自动让行，避免抢占正常复制与终端按键。
+- 鼠标侧键 3/4 继续负责天工台历史后退/前进，但在 Claudian 嵌入区域内不拦截跨插件事件。
+- Claudian 上下文改为只调用其活动标签页的 `FileContextManager.setCurrentNote()`；不再伪造全局 `file-open` 事件污染其它插件的最近记录或生命周期。
+- X Watch 写操作的 Bearer Token 已从 TypeScript 源码移除，改由插件设置中的密码框读取；值仅保存在本机插件 `data.json`，不会进入源代码。
+- 已进入 Git 历史的旧 Token 必须在 Daemon/Worker 端轮换；新提交只能移除当前版本，不能抹除已公开的历史。
+
+验收：重载插件后，在设置中填写与 `HAMAXIANG_DAEMON_TOKEN` 一致的新值；单击任意节点后按 `Ctrl+Shift+C`，粘贴结果应为该节点的 Vault 相对路径。进入 Agent 页时，Claudian 当前笔记胶囊应切换为该节点，且不改变 Obsidian 顶部活动笔记。

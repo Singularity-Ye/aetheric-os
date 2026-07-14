@@ -13,16 +13,18 @@ export interface ScriptoriumSettings {
   todoFilePath: string;
   autoOpenShell: boolean;
   nativeUiHidden: boolean;
+  hamasxiangDaemonToken: string;
   workspaces: AethericWorkspace[];
   shellState: AethericShellState;
 }
 
 export const DEFAULT_SETTINGS: ScriptoriumSettings = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   personalBlogPath: "d:\\Yhx06\\Documents\\仙术工坊——项目集\\个人博客网站-松果阁\\personal-blog",
   todoFilePath: "08_密室/todo.md",
   autoOpenShell: true,
   nativeUiHidden: true,
+  hamasxiangDaemonToken: "",
   workspaces: DEFAULT_WORKSPACES,
   shellState: DEFAULT_SHELL_STATE,
 };
@@ -54,7 +56,7 @@ export function mergeSettings(raw: Partial<ScriptoriumSettings> | null | undefin
       return list.length ? list : structuredClone(DEFAULT_WORKSPACES);
     })(),
     shellState,
-    schemaVersion: 2,
+    schemaVersion: 3,
   };
 }
 
@@ -88,6 +90,21 @@ export class ScriptoriumSettingTab extends PluginSettingTab {
           this.plugin.nativeUi.apply(value);
           await this.plugin.saveSettings();
         }));
+
+    new Setting(containerEl)
+      .setName("蛤蟆祥 Daemon Token")
+      .setDesc("仅保存在本机 Obsidian 插件 data.json 中，用于 X Watch 等写操作；不要提交到代码仓库。")
+      .addText(text => {
+        text.inputEl.type = "password";
+        text
+          .setPlaceholder("与 hamaxiang-system/.env 保持一致")
+          .setValue(this.plugin.settings.hamasxiangDaemonToken)
+          .onChange(async value => {
+            this.plugin.settings.hamasxiangDaemonToken = value.trim();
+            this.plugin.hamasxiangAdapter.setAuthToken(value);
+            await this.plugin.saveSettings();
+          });
+      });
 
     new Setting(containerEl)
       .setName("个人博客网站路径")

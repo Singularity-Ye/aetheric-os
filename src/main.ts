@@ -28,7 +28,11 @@ export default class ScriptoriumPlugin extends Plugin {
     });
     this.indexService = new VaultIndexService(this.app, this);
     this.indexService.start();
-    this.hamasxiangAdapter = new HamasxiangAdapter(this.logBus);
+    this.hamasxiangAdapter = new HamasxiangAdapter(
+      this.logBus,
+      "http://127.0.0.1:8765",
+      this.settings.hamasxiangDaemonToken,
+    );
     this.registerInterval(window.setInterval(() => void this.hamasxiangAdapter.refresh(false), 15000));
 
     this.addSettingTab(new ScriptoriumSettingTab(this.app, this));
@@ -56,6 +60,26 @@ export default class ScriptoriumPlugin extends Plugin {
       id: "enable-aetheric-shell-ui",
       name: "重新启用 Aetheric OS 统一外壳",
       callback: () => void this.enableAethericUi(),
+    });
+    this.addCommand({
+      id: "copy-selected-node-relative-path",
+      name: "复制当前节点的 Vault 相对路径",
+      hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "C" }],
+      checkCallback: checking => {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement && (
+          activeElement.matches("input, textarea, [contenteditable='true']")
+          || activeElement.closest(".aos-claudian-embed")
+        )) return false;
+
+        const view = this.app.workspace.getLeavesOfType(AETHERIC_SHELL_VIEW)
+          .map(leaf => leaf.view)
+          .find(candidate => candidate instanceof AethericShellView) as AethericShellView | undefined;
+        const path = view?.getSelectedNodePath();
+        if (!path) return false;
+        if (!checking) void this.copySelectedNodePath(path);
+        return true;
+      },
     });
 
     this.registerEvent(this.app.workspace.on("file-open", file => this.recordRecentFile(file)));
@@ -193,6 +217,18 @@ export default class ScriptoriumPlugin extends Plugin {
     await this.saveSettings();
     this.logBus.append("warn", "shell.native-ui", "已安全恢复 Obsidian 原生界面");
     new Notice("已恢复 Obsidian 原生界面");
+  }
+
+  private async copySelectedNodePath(path: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(path);
+      this.logBus.append("success", "navigation.clipboard", `已复制 Vault 相对路径：${path}`);
+      new Notice(`已复制相对路径：${path}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logBus.append("error", "navigation.clipboard", `复制失败：${message}`);
+      new Notice(`复制路径失败：${message}`);
+    }
   }
 
   async enableAethericUi(): Promise<void> {
