@@ -116,6 +116,17 @@ export default class ScriptoriumPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       void this.initializeShell();
     });
+
+    this.registerEvent(this.app.vault.on("modify", file => {
+      if (file instanceof TFile && file.path === ".agents/chat/dialog.md") {
+        const leaves = this.app.workspace.getLeavesOfType(AETHERIC_SHELL_VIEW);
+        for (const leaf of leaves) {
+          if (leaf.view instanceof AethericShellView) {
+            leaf.view.renderContext();
+          }
+        }
+      }
+    }));
   }
 
   onunload(): void {
