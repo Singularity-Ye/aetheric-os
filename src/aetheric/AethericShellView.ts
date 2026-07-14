@@ -722,6 +722,12 @@ export class AethericShellView extends ItemView {
       chatTitle.setAttribute("style", "font-size: 11px; font-weight: bold; margin-bottom: 8px; color: var(--aos-gold);");
       
       try {
+        // Sync active file context to Claudian by triggering Obsidian's native file-open event
+        const file = this.app.vault.getAbstractFileByPath(node.path);
+        if (file && (file as any).extension === "md") {
+          this.app.workspace.trigger("file-open", file);
+        }
+
         let leaf: any = this.app.workspace.getLeavesOfType("claudian-view")[0] || null;
         if (!leaf) {
           leaf = this.app.workspace.getRightLeaf(false);
