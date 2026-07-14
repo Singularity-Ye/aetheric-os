@@ -1040,6 +1040,89 @@ export class AethericShellView extends ItemView {
       return true;
     };
 
+    const writeDebug = async (sent: any) => {
+      try {
+        const viewType = this.graphScope === "current-file" ? "localgraph" : "graph";
+        const folderPath = this.plugin.store.getSnapshot().selectedFolderPath;
+        const ws = this.getWorkspace();
+        let searchQuery = "";
+        if (this.graphScope === "current-folder" && folderPath) {
+          searchQuery = `path:"${normalizePath(folderPath)}"`;
+        } else if (this.graphScope === "current-workspace" && ws && ws.rootPaths) {
+          searchQuery = ws.rootPaths.map(p => `path:"${normalizePath(p)}"`).join(" OR ");
+        } else if (this.graphScope === "current-tag") {
+          if (this.selectedNode && this.selectedNode.tags && this.selectedNode.tags.length > 0) {
+            searchQuery = this.selectedNode.tags.map(t => `tag:${t.startsWith("#") ? t : `#${t}`}`).join(" OR ");
+          } else {
+            searchQuery = "tag:#nonexistentplaceholder";
+          }
+        }
+        
+        let viewKeys: string[] = [];
+        let viewData: any = {};
+        let engineKeys: string[] = [];
+        if (this.nativeGraphView) {
+          viewKeys = Object.keys(this.nativeGraphView);
+          if (this.nativeGraphView.dataEngine) {
+            engineKeys = Object.keys(this.nativeGraphView.dataEngine);
+          }
+          for (const key of ["search", "query", "options", "settings", "filter", "renderer", "data"]) {
+            if (key in this.nativeGraphView) {
+              const val = this.nativeGraphView[key];
+              if (typeof val === "function") {
+                viewData[key] = "[Function]";
+              } else if (val && typeof val === "object") {
+                viewData[key] = `[Object] with keys: ${Object.keys(val).join(", ")}`;
+              } else {
+                viewData[key] = val;
+              }
+            }
+          }
+        }
+
+        // Output directly to Scriptorium's UI LogBus
+        this.plugin.logBus.append(
+          "info",
+          "graph.state",
+          `Scope: ${this.graphScope} | Query: ${searchQuery} | EngineKeys: ${engineKeys.slice(0, 15).join(", ")}`
+        );
+
+        const after = this.nativeGraphView ? this.nativeGraphView.getState() : null;
+        await this.app.vault.adapter.write(
+          "graph_state_debug.txt",
+          JSON.stringify({
+            viewType,
+            scope: this.graphScope,
+            folderPath,
+            searchQuery,
+            sent,
+            after,
+            viewKeys,
+            viewData
+          }, null, 2)
+        );
+      } catch (e) {
+        console.warn("Failed to write graph debug", e);
+      }
+    };
+
+    const applyEngineOptions = (query: string) => {
+      const engine = this.nativeGraphView ? (this.nativeGraphView as any).dataEngine : null;
+      if (engine) {
+        if (engine.options) {
+          engine.options.search = query;
+          engine.options.showTags = this.graphScope === "current-tag";
+        }
+        if (typeof engine.onOptionsChange === "function") {
+          try {
+            engine.onOptionsChange();
+          } catch (e) {
+            console.warn("Failed to trigger dataEngine.onOptionsChange", e);
+          }
+        }
+      }
+    };
+
     try {
       const viewType = this.graphScope === "current-file" ? "localgraph" : "graph";
       const viewCreator = (this.app as any).viewRegistry.getViewCreatorByType(viewType);
@@ -1156,6 +1239,8 @@ export class AethericShellView extends ItemView {
           };
           
           await this.nativeGraphView.setState(graphState, { history: false });
+          applyEngineOptions(searchQuery);
+          await writeDebug(graphState);
           if (abortIfStale()) {
             overlay.remove();
             return;
@@ -1255,6 +1340,8 @@ export class AethericShellView extends ItemView {
       };
 
       await graphView.setState(graphState, { history: false });
+      applyEngineOptions(searchQuery);
+      await writeDebug(graphState);
       if (abortIfStale()) {
         overlay.remove();
         return;

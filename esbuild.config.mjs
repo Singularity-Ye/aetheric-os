@@ -18,6 +18,11 @@ const isProd = process.argv[2] === "production";
 // Default copy destination
 const defaultDest = "C:\\Users\\Yhx06\\Documents\\Obsidian Vault\\.obsidian\\plugins\\obsidian-scriptorium";
 const targetDir = process.env.OBSIDIAN_PLUGIN_DIR || defaultDest;
+const targetDirs = [targetDir];
+const activeVaultDest = "d:\\Yhx06\\Documents\\仙术工坊——项目集\\.obsidian\\plugins\\obsidian-scriptorium";
+if (!targetDirs.includes(activeVaultDest)) {
+  targetDirs.push(activeVaultDest);
+}
 
 const styleSources = [
   "styles.css",
@@ -30,22 +35,32 @@ const styleSources = [
 
 const copyManifestAndStyles = () => {
   try {
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
+    const mainSource = path.join(targetDir, "main.js");
+    const hasMainSource = fs.existsSync(mainSource);
+
+    for (const dir of targetDirs) {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      // Copy manifest.json
+      fs.copyFileSync("manifest.json", path.join(dir, "manifest.json"));
+      console.log(`Copied manifest.json to ${dir}`);
+      
+      // Copy main.js from targetDir if it exists and dir is secondary
+      if (dir !== targetDir && hasMainSource) {
+        fs.copyFileSync(mainSource, path.join(dir, "main.js"));
+        console.log(`Copied main.js to ${dir}`);
+      }
+      
+      // Source is authoritative: merge styles
+      const mergedStyles = styleSources
+        .filter((source) => fs.existsSync(source))
+        .map((source) => `/* source: ${source} */\n${fs.readFileSync(source, "utf8")}`)
+        .join("\n\n");
+      fs.writeFileSync(path.join(dir, "styles.css"), mergedStyles, "utf8");
+      console.log(`Built styles.css from ${styleSources.length} source files into ${dir}`);
     }
-    
-    // Copy manifest.json
-    fs.copyFileSync("manifest.json", path.join(targetDir, "manifest.json"));
-    console.log(`Copied manifest.json to ${targetDir}`);
-    
-    // Source is authoritative: merge the legacy dashboard and Aetheric shell
-    // fragments into the single stylesheet Obsidian loads.
-    const mergedStyles = styleSources
-      .filter((source) => fs.existsSync(source))
-      .map((source) => `/* source: ${source} */\n${fs.readFileSync(source, "utf8")}`)
-      .join("\n\n");
-    fs.writeFileSync(path.join(targetDir, "styles.css"), mergedStyles, "utf8");
-    console.log(`Built styles.css from ${styleSources.length} source files into ${targetDir}`);
   } catch (err) {
     console.error("Error during copying assets:", err);
   }
