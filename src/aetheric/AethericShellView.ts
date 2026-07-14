@@ -105,6 +105,11 @@ export class AethericShellView extends ItemView {
     this.mainPane = workArea.createDiv({ cls: "aos-main-pane" });
     this.contextPane = workArea.createDiv({ cls: "aos-context-pane" });
 
+    const startState = this.plugin.store.getSnapshot();
+    if (startState.selectedFilePath) {
+      this.selectedNode = this.toNode(startState.selectedFilePath);
+    }
+
     this.applyPanelWidths();
     this.renderModeRail();
     this.renderNavigator();
@@ -121,10 +126,15 @@ export class AethericShellView extends ItemView {
     });
 
     this.unsubscribeIndex = this.plugin.indexService.subscribe(() => {
+      const state = this.plugin.store.getSnapshot();
+      if (!this.selectedNode && state.selectedFilePath) {
+        this.selectedNode = this.toNode(state.selectedFilePath);
+      }
       this.updateIndexStatus();
       this.renderNavigator();
-      if (this.plugin.store.getSnapshot().activeModule === "overview") this.renderOverview();
-      if (this.plugin.store.getSnapshot().activeModule === "navigation") this.refreshVirtualList();
+      if (state.activeModule === "overview") this.renderOverview();
+      if (state.activeModule === "navigation") this.refreshVirtualList();
+      if (state.activeModule === "knowledge") this.renderKnowledgeGraph();
       this.renderContext();
     });
     this.unsubscribeHamasxiang = this.plugin.hamasxiangAdapter.subscribe(() => {
