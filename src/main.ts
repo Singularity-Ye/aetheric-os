@@ -20,6 +20,7 @@ export default class ScriptoriumPlugin extends Plugin {
   indexService!: VaultIndexService;
   hamasxiangAdapter!: HamasxiangAdapter;
   private saveTimer: number | null = null;
+  private pollTimeout: number | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -34,7 +35,22 @@ export default class ScriptoriumPlugin extends Plugin {
       "http://127.0.0.1:8765",
       this.settings.hamasxiangDaemonToken,
     );
-    this.registerInterval(window.setInterval(() => void this.hamasxiangAdapter.refresh(false), 15000));
+    
+    let currentInterval = 15000;
+    const poll = async () => {
+      try {
+        const snapshot = await this.hamasxiangAdapter.refresh(false);
+        if (snapshot.online) {
+          currentInterval = 15000;
+        } else {
+          currentInterval = Math.min(currentInterval * 1.5, 120000);
+        }
+      } catch (e) {
+        currentInterval = Math.min(currentInterval * 1.5, 120000);
+      }
+      this.pollTimeout = window.setTimeout(() => void poll(), currentInterval);
+    };
+    void poll();
 
     this.addSettingTab(new ScriptoriumSettingTab(this.app, this));
     this.registerView(AETHERIC_SHELL_VIEW, leaf => new AethericShellView(leaf, this));
@@ -165,6 +181,7 @@ export default class ScriptoriumPlugin extends Plugin {
 
   onunload(): void {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+    if (this.pollTimeout !== null) window.clearTimeout(this.pollTimeout);
     this.nativeUi.restore();
   }
 

@@ -770,19 +770,30 @@ button.aos-chat-send-btn:active {
 }
 .aos-task-action-btn {
   height: 24px;
-  padding: 0 8px;
-  font-size: 9px;
-  font-weight: 700;
-  border: 1px solid var(--aos-border);
-  background: var(--aos-surface);
-  color: var(--aos-ink);
+  padding: 0 10px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid var(--aos-border-strong);
+  background: linear-gradient(to bottom, var(--aos-surface), color-mix(in srgb, var(--aos-surface-muted) 50%, transparent));
+  color: var(--aos-ink-muted);
   border-radius: 6px;
   cursor: pointer;
-  box-shadow: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .aos-task-action-btn:hover {
-  border-color: var(--aos-gold-soft);
-  color: var(--aos-gold);
+  border-color: var(--aos-gold);
+  background: linear-gradient(to bottom, var(--aos-paper), var(--aos-surface));
+  color: var(--aos-gold-dark, #a96f17);
+  box-shadow: 0 2px 6px rgba(169, 111, 23, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transform: translateY(-0.5px);
+}
+.aos-task-action-btn:active {
+  transform: translateY(0.5px);
+  box-shadow: 0 1px 1px rgba(169, 111, 23, 0.05);
 }
 
 /* Status Dot Extra Styling */
