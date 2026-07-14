@@ -359,8 +359,12 @@ export class HamasxiangAdapter {
   private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    const headers = {
+      ...(init.headers || {}),
+      "Authorization": "Bearer mind_kv_233233"
+    };
     try {
-      return await fetch(url, { ...init, signal: controller.signal });
+      return await fetch(url, { ...init, headers, signal: controller.signal });
     } finally {
       window.clearTimeout(timer);
     }
