@@ -1107,6 +1107,10 @@ export class AethericShellView extends ItemView {
     };
 
     const applyEngineOptions = (query: string) => {
+      const viewType = this.graphScope === "current-file" ? "localgraph" : "graph";
+      if (viewType !== "graph") return;
+
+      // 1. Update global singleton options
       try {
         const graphPlugin = (this.app as any).internalPlugins?.getPluginById("graph")?.instance;
         if (graphPlugin && graphPlugin.options) {
@@ -1118,22 +1122,42 @@ export class AethericShellView extends ItemView {
         console.warn("Failed to update global graph plugin options", e);
       }
 
-      const engine = this.nativeGraphView ? (this.nativeGraphView as any).dataEngine : null;
-      if (engine) {
-        if (engine.options) {
-          engine.options.search = query;
-          engine.options.showTags = this.graphScope === "current-tag";
+      // 2. Safely type the query into the DOM search input
+      let attempts = 0;
+      const maxAttempts = 20;
+      const interval = window.setInterval(() => {
+        const inputEl = canvas.querySelector(".graph-controls input[type='search']") as HTMLInputElement 
+                     || canvas.querySelector("input[type='search']") as HTMLInputElement
+                     || canvas.querySelector(".graph-controls input") as HTMLInputElement
+                     || canvas.querySelector("input") as HTMLInputElement;
+
+        if (inputEl) {
+          window.clearInterval(interval);
+          try {
+            inputEl.value = query;
+            inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+            inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+            const enterEvent = new KeyboardEvent("keydown", {
+              key: "Enter",
+              code: "Enter",
+              keyCode: 13,
+              which: 13,
+              bubbles: true,
+              cancelable: true
+            });
+            inputEl.dispatchEvent(enterEvent);
+            this.plugin.logBus.append("success", "graph.dom_filter", `Applied query via DOM: ${query}`);
+          } catch (e) {
+            console.warn("Failed to apply query via DOM events", e);
+          }
+        } else {
+          attempts++;
+          if (attempts >= maxAttempts) {
+            window.clearInterval(interval);
+            this.plugin.logBus.append("warn", "graph.dom_filter", `Could not find search input in DOM after ${maxAttempts} attempts`);
+          }
         }
-        if (typeof engine.onOptionsChange === "function") {
-          window.setTimeout(() => {
-            try {
-              engine.onOptionsChange();
-            } catch (e) {
-              console.warn("Failed to trigger dataEngine.onOptionsChange", e);
-            }
-          }, 50);
-        }
-      }
+      }, 100);
     };
 
     try {
