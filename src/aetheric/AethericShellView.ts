@@ -1696,11 +1696,20 @@ export class AethericShellView extends ItemView {
       return;
     }
 
-    // 1. Prepare layout dimensions prior to loading document
-    this.plugin.nativeUi.apply(false);
-    this.app.workspace.rightSplit.expand();
-    // Wait for split drawer and ribbon animation frames to settle
-    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
+    // 1. If the file is already open in any workspace tab, switch to it immediately
+    let existingLeaf: any = null;
+    this.app.workspace.iterateAllLeaves(l => {
+      if (l.view && (l.view as any).file && (l.view as any).file.path === file.path) {
+        existingLeaf = l;
+      }
+    });
+
+    if (existingLeaf) {
+      this.app.workspace.setActiveLeaf(existingLeaf, { focus: true });
+      this.app.workspace.rightSplit.expand();
+      this.plugin.logBus.append("success", "workspace.open", `已切换到已有标签页：${node.path}`);
+      return;
+    }
 
     // 2. Find or spawn dedicated Aetheric Reading Tab Leaf
     let leaf: any = null;
@@ -1716,14 +1725,14 @@ export class AethericShellView extends ItemView {
       this.readingLeafId = (leaf as any).id;
     }
 
-    // 3. Load note in tab
-    await leaf.openFile(file);
-
-    // 4. Focus active leaf
+    // 3. Switch to the target tab first for instant visual feedback and UI restoration
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
 
-    // 5. Stabilize outline metadata and editor properties rendering
-    await new Promise<void>(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
+    // 4. Load the file content in the active tab
+    await leaf.openFile(file);
+
+    // 5. Expand the outline sidebar panel
+    this.app.workspace.rightSplit.expand();
 
     this.plugin.logBus.append("success", "workspace.open", `已在原生编辑器和右侧大纲栏打开：${node.path}`);
   }
