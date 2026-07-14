@@ -147,15 +147,8 @@ export class AethericShellView extends ItemView {
   }
 
   async onClose(): Promise<void> {
-    if (this.nativeGraphView) {
-      try {
-        this.nativeGraphView.unload();
-      } catch (e) {
-        console.warn("Unloading native graph view error", e);
-      }
-      this.nativeGraphView = null;
-      this.nativeGraphLeaf = null;
-    }
+    this.currentRenderId += 1;
+    this.disposeNativeGraphView();
     this.virtualList?.destroy();
     this.virtualList = null;
     this.logDock?.destroy();
@@ -878,8 +871,15 @@ export class AethericShellView extends ItemView {
   }
 
   private renderKnowledgeGraph(): void {
+    // Treat every scope/context update as a new render transaction so delayed
+    // work from an older native graph cannot overwrite the current scope.
+    this.currentRenderId += 1;
     const state = this.plugin.store.getSnapshot();
     const selectedFilePath = this.selectedNode?.path ?? state.selectedFilePath ?? null;
+    const selectedTags = selectedFilePath
+      ? (this.plugin.indexService.getIndexedFile(selectedFilePath)?.tags ?? [])
+      : [];
+    const hasCurrentTag = selectedTags.length > 0;
 
     if (!selectedFilePath && this.graphScope === "current-file") {
       this.graphScope = "current-workspace";
@@ -903,17 +903,26 @@ export class AethericShellView extends ItemView {
             } else {
               button.removeAttribute("title");
             }
+          } else if (scope === "current-tag") {
+            button.disabled = selectedTags.length === 0;
+            if (selectedTags.length === 0) {
+              button.setAttribute("title", "当前节点没有可用于筛选的标签");
+            } else {
+              button.removeAttribute("title");
+            }
           }
         }
       });
 
       // 2. Fetch new graph data based on scope & workspace
-      const data = this.plugin.indexService.getGraphData(
-        selectedFilePath,
-        this.graphScope,
-        this.getWorkspace(),
-        state.selectedFolderPath,
-      );
+      const data = this.graphScope === "current-tag" && !hasCurrentTag
+        ? { nodes: [], edges: [], truncated: false }
+        : this.plugin.indexService.getGraphData(
+          selectedFilePath,
+          this.graphScope,
+          this.getWorkspace(),
+          state.selectedFolderPath,
+        );
 
       // 3. Update metadata counts
       const meta = existingPage.querySelector(".aos-graph-meta");
@@ -928,15 +937,19 @@ export class AethericShellView extends ItemView {
       const canvas = existingPage.querySelector(".aos-graph-canvas") as HTMLDivElement;
       if (canvas) {
         if (!this.plugin.indexService.isReady()) {
+          this.disposeNativeGraphView();
           canvas.empty();
           canvas.createDiv({ cls: "aos-empty-state", text: "知识索引正在准备中，完成后将显示当前工作域图谱。" });
           return;
         }
         if (data.nodes.length === 0) {
+          this.disposeNativeGraphView();
           canvas.empty();
           const message = this.graphScope === "current-file"
             ? "当前未选中任何节点。请先在工作域中选择节点以渲染局部图谱。"
-            : "当前作用域内暂无可渲染的知识节点。";
+            : this.graphScope === "current-tag"
+              ? "当前节点没有标签，无法生成标签图谱。"
+              : "当前作用域内暂无可渲染的知识节点。";
           canvas.createDiv({ cls: "aos-empty-state", text: message });
           return;
         }
@@ -945,7 +958,7 @@ export class AethericShellView extends ItemView {
           ? selectedFilePath
           : data.nodes[0].path;
 
-        void this.mountNativeGraph(canvas, graphSeedPath, data);
+        void this.mountGraphCanvas(canvas, graphSeedPath, data, this.graphScope, selectedTags);
       }
       return;
     }
@@ -966,6 +979,9 @@ export class AethericShellView extends ItemView {
       if (scope === "current-file" && !selectedFilePath) {
         button.disabled = true;
         button.setAttribute("title", "请先在当前工作域中选择一个知识节点");
+      } else if (scope === "current-tag" && selectedTags.length === 0) {
+        button.disabled = true;
+        button.setAttribute("title", "当前节点没有可用于筛选的标签");
       }
       button.addEventListener("click", () => {
         this.graphScope = scope;
@@ -984,12 +1000,14 @@ export class AethericShellView extends ItemView {
       new Notice("正在新标签页中打开官方全局关系图谱...");
     });
 
-    const data = this.plugin.indexService.getGraphData(
-      selectedFilePath,
-      this.graphScope,
-      this.getWorkspace(),
-      state.selectedFolderPath,
-    );
+    const data = this.graphScope === "current-tag" && !hasCurrentTag
+      ? { nodes: [], edges: [], truncated: false }
+      : this.plugin.indexService.getGraphData(
+        selectedFilePath,
+        this.graphScope,
+        this.getWorkspace(),
+        state.selectedFolderPath,
+      );
     const meta = page.createDiv({ cls: "aos-graph-meta" });
     meta.createSpan({ text: `${data.nodes.length} 个节点 (索引预估)` });
     meta.createSpan({ text: `${data.edges.length} 条关系 (索引预估)` });
@@ -997,13 +1015,17 @@ export class AethericShellView extends ItemView {
     const canvas = page.createDiv({ cls: "aos-graph-canvas" });
     canvas.setAttribute("style", "height: 100%; min-height: 480px; display: flex; flex-direction: column;");
     if (!this.plugin.indexService.isReady()) {
+      this.disposeNativeGraphView();
       canvas.createDiv({ cls: "aos-empty-state", text: "知识索引正在准备中，完成后将显示当前工作域图谱。" });
       return;
     }
     if (data.nodes.length === 0) {
+      this.disposeNativeGraphView();
       const message = this.graphScope === "current-file"
         ? "当前未选中任何节点。请先在工作域中选择节点以渲染局部图谱。"
-        : "当前作用域内暂无可渲染的知识节点。";
+        : this.graphScope === "current-tag"
+          ? "当前节点没有标签，无法生成标签图谱。"
+          : "当前作用域内暂无可渲染的知识节点。";
       canvas.createDiv({ cls: "aos-empty-state", text: message });
       return;
     }
@@ -1015,10 +1037,38 @@ export class AethericShellView extends ItemView {
       ? selectedFilePath
       : data.nodes[0].path;
 
-    void this.mountNativeGraph(canvas, graphSeedPath, data);
+    void this.mountGraphCanvas(canvas, graphSeedPath, data, this.graphScope, selectedTags);
   }
 
-  private async mountNativeGraph(canvas: HTMLDivElement, seedPath: string, data: any): Promise<void> {
+  private disposeNativeGraphView(): void {
+    const graphView = this.nativeGraphView;
+    this.nativeGraphView = null;
+    this.nativeGraphLeaf = null;
+    if (!graphView) return;
+    try {
+      if (typeof graphView.unload === "function") graphView.unload();
+    } catch (error) {
+      console.warn("Unloading native graph view error", error);
+    }
+  }
+
+  private async mountGraphCanvas(
+    canvas: HTMLDivElement,
+    seedPath: string,
+    data: any,
+    scope: GraphScope,
+    selectedTags: readonly string[],
+  ): Promise<void> {
+    await this.mountNativeGraph(canvas, seedPath, data, scope, selectedTags);
+  }
+
+  private async mountNativeGraph(
+    canvas: HTMLDivElement,
+    seedPath: string,
+    data: any,
+    scope: GraphScope,
+    selectedTags: readonly string[],
+  ): Promise<void> {
     const renderId = this.currentRenderId;
     let ownedGraphView: any = null;
     const disposeOwnedView = (): void => {
@@ -1040,128 +1090,8 @@ export class AethericShellView extends ItemView {
       return true;
     };
 
-    const writeDebug = async (sent: any) => {
-      try {
-        const viewType = this.graphScope === "current-file" ? "localgraph" : "graph";
-        const folderPath = this.plugin.store.getSnapshot().selectedFolderPath;
-        const ws = this.getWorkspace();
-        let searchQuery = "";
-        if (this.graphScope === "current-folder" && folderPath) {
-          searchQuery = `path:"${normalizePath(folderPath)}"`;
-        } else if (this.graphScope === "current-workspace" && ws && ws.rootPaths) {
-          searchQuery = ws.rootPaths.map(p => `path:"${normalizePath(p)}"`).join(" OR ");
-        } else if (this.graphScope === "current-tag") {
-          if (this.selectedNode && this.selectedNode.tags && this.selectedNode.tags.length > 0) {
-            searchQuery = this.selectedNode.tags.map(t => `tag:${t.startsWith("#") ? t : `#${t}`}`).join(" OR ");
-          } else {
-            searchQuery = "tag:#nonexistentplaceholder";
-          }
-        }
-        
-        let viewKeys: string[] = [];
-        let viewData: any = {};
-        let engineKeys: string[] = [];
-        if (this.nativeGraphView) {
-          viewKeys = Object.keys(this.nativeGraphView);
-          if (this.nativeGraphView.dataEngine) {
-            engineKeys = Object.keys(this.nativeGraphView.dataEngine);
-          }
-          for (const key of ["search", "query", "options", "settings", "filter", "renderer", "data"]) {
-            if (key in this.nativeGraphView) {
-              const val = this.nativeGraphView[key];
-              if (typeof val === "function") {
-                viewData[key] = "[Function]";
-              } else if (val && typeof val === "object") {
-                viewData[key] = `[Object] with keys: ${Object.keys(val).join(", ")}`;
-              } else {
-                viewData[key] = val;
-              }
-            }
-          }
-        }
-
-        // Output directly to Scriptorium's UI LogBus
-        this.plugin.logBus.append(
-          "info",
-          "graph.state",
-          `Scope: ${this.graphScope} | Query: ${searchQuery} | EngineKeys: ${engineKeys.slice(0, 15).join(", ")}`
-        );
-
-        const after = this.nativeGraphView ? this.nativeGraphView.getState() : null;
-        await this.app.vault.adapter.write(
-          "graph_state_debug.txt",
-          JSON.stringify({
-            viewType,
-            scope: this.graphScope,
-            folderPath,
-            searchQuery,
-            sent,
-            after,
-            viewKeys,
-            viewData
-          }, null, 2)
-        );
-      } catch (e) {
-        console.warn("Failed to write graph debug", e);
-      }
-    };
-
-    const applyEngineOptions = (query: string) => {
-      const viewType = this.graphScope === "current-file" ? "localgraph" : "graph";
-      if (viewType !== "graph") return;
-
-      // 1. Update global singleton options
-      try {
-        const graphPlugin = (this.app as any).internalPlugins?.getPluginById("graph")?.instance;
-        if (graphPlugin && graphPlugin.options) {
-          graphPlugin.options.search = query;
-          graphPlugin.options.showTags = this.graphScope === "current-tag";
-          void graphPlugin.saveData().catch(() => {});
-        }
-      } catch (e) {
-        console.warn("Failed to update global graph plugin options", e);
-      }
-
-      // 2. Safely type the query into the DOM search input
-      let attempts = 0;
-      const maxAttempts = 20;
-      const interval = window.setInterval(() => {
-        const inputEl = canvas.querySelector(".graph-controls input[type='search']") as HTMLInputElement 
-                     || canvas.querySelector("input[type='search']") as HTMLInputElement
-                     || canvas.querySelector(".graph-controls input") as HTMLInputElement
-                     || canvas.querySelector("input") as HTMLInputElement;
-
-        if (inputEl) {
-          window.clearInterval(interval);
-          try {
-            inputEl.value = query;
-            inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-            inputEl.dispatchEvent(new Event("change", { bubbles: true }));
-            const enterEvent = new KeyboardEvent("keydown", {
-              key: "Enter",
-              code: "Enter",
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-              cancelable: true
-            });
-            inputEl.dispatchEvent(enterEvent);
-            this.plugin.logBus.append("success", "graph.dom_filter", `Applied query via DOM: ${query}`);
-          } catch (e) {
-            console.warn("Failed to apply query via DOM events", e);
-          }
-        } else {
-          attempts++;
-          if (attempts >= maxAttempts) {
-            window.clearInterval(interval);
-            this.plugin.logBus.append("warn", "graph.dom_filter", `Could not find search input in DOM after ${maxAttempts} attempts`);
-          }
-        }
-      }, 100);
-    };
-
     try {
-      const viewType = this.graphScope === "current-file" ? "localgraph" : "graph";
+      const viewType = scope === "current-file" ? "localgraph" : "graph";
       const viewCreator = (this.app as any).viewRegistry.getViewCreatorByType(viewType);
       if (!viewCreator) throw new Error(`No view creator for ${viewType}`);
 
@@ -1202,22 +1132,40 @@ export class AethericShellView extends ItemView {
       let currentOptions: any = {};
       const folderPath = this.plugin.store.getSnapshot().selectedFolderPath;
       let searchQuery = "";
+
+      const applyEmbeddedGraphSearch = (gv: any): void => {
+        if (viewType !== "graph") return;
+        const engine = gv?.dataEngine;
+        if (
+          typeof engine?.setOptions !== "function"
+          || typeof engine?.requestUpdateSearch?.run !== "function"
+        ) {
+          throw new Error("Embedded global graph search engine is unavailable");
+        }
+
+        // Obsidian's updateSearch() reads the FilterOptions search control, not
+        // engine.options. setOptions() updates that control through the native
+        // option listener; run() flushes the built-in debouncer immediately.
+        engine.setOptions({
+          search: searchQuery,
+          showTags: scope === "current-tag",
+        });
+        engine.requestUpdateSearch.run();
+      };
       
-      if (this.graphScope === "current-folder" && folderPath) {
+      if (scope === "current-folder" && folderPath) {
         searchQuery = `path:"${normalizePath(folderPath)}"`;
-      } else if (this.graphScope === "current-workspace") {
+      } else if (scope === "current-workspace") {
         const ws = this.getWorkspace();
         if (ws && ws.rootPaths && ws.rootPaths.length > 0) {
           searchQuery = ws.rootPaths.map(p => `path:"${normalizePath(p)}"`).join(" OR ");
         }
-      } else if (this.graphScope === "current-tag") {
-        if (this.selectedNode && this.selectedNode.tags && this.selectedNode.tags.length > 0) {
-          searchQuery = this.selectedNode.tags.map(t => {
+      } else if (scope === "current-tag") {
+        if (selectedTags.length > 0) {
+          searchQuery = selectedTags.map(t => {
             const name = t.startsWith("#") ? t : `#${t}`;
             return `tag:${name}`;
           }).join(" OR ");
-        } else {
-          searchQuery = "tag:#nonexistentplaceholder";
         }
       }
 
@@ -1265,23 +1213,22 @@ export class AethericShellView extends ItemView {
           } : {
             "collapse-filter": true,
             ...currentOptions,
-            "showTags": this.graphScope === "current-tag",
+            "showTags": scope === "current-tag",
             "search": searchQuery,
             options: {
               "collapse-filter": true,
               ...currentOptions,
-              "showTags": this.graphScope === "current-tag",
+              "showTags": scope === "current-tag",
               "search": searchQuery
             }
           };
           
           await this.nativeGraphView.setState(graphState, { history: false });
-          applyEngineOptions(searchQuery);
-          await writeDebug(graphState);
           if (abortIfStale()) {
             overlay.remove();
             return;
           }
+          applyEmbeddedGraphSearch(this.nativeGraphView);
           await new Promise<void>(resolve => window.setTimeout(resolve, 240));
           if (abortIfStale()) {
             overlay.remove();
@@ -1366,19 +1313,17 @@ export class AethericShellView extends ItemView {
       } : {
         "collapse-filter": true,
         ...currentOptions,
-        "showTags": this.graphScope === "current-tag",
+        "showTags": scope === "current-tag",
         "search": searchQuery,
         options: {
           "collapse-filter": true,
           ...currentOptions,
-          "showTags": this.graphScope === "current-tag",
+          "showTags": scope === "current-tag",
           "search": searchQuery
         }
       };
 
       await graphView.setState(graphState, { history: false });
-      applyEngineOptions(searchQuery);
-      await writeDebug(graphState);
       if (abortIfStale()) {
         overlay.remove();
         return;
@@ -1410,7 +1355,8 @@ export class AethericShellView extends ItemView {
         throw new Error(`Native ${viewType} mounted without a renderable canvas`);
       }
 
-      void this.app.vault.adapter.remove("graph_error.txt").catch(() => {});
+      // Apply search query through the embedded engine's narrow search refresh.
+      applyEmbeddedGraphSearch(graphView);
 
       // Fade out helper with timeout safety fallback
       overlay.style.opacity = "0";
@@ -1426,11 +1372,11 @@ export class AethericShellView extends ItemView {
     } catch (err) {
       if (abortIfStale()) return;
       console.warn("Failed to load native localgraph, falling back to SVG force layout", err);
-      if (err instanceof Error) {
-        void this.app.vault.adapter.write("graph_error.txt", `${err.message}\n${err.stack}`);
-      } else {
-        void this.app.vault.adapter.write("graph_error.txt", String(err));
-      }
+      this.plugin.logBus.append(
+        "error",
+        "graph.render",
+        err instanceof Error ? err.message : String(err),
+      );
       disposeOwnedView();
       canvas.empty();
       this.drawGraph(canvas, data.nodes, data.edges, seedPath);
