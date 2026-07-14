@@ -725,9 +725,18 @@ export class AethericShellView extends ItemView {
         let leaf: any = this.app.workspace.getLeavesOfType("claudian-view")[0] || null;
         if (!leaf) {
           leaf = this.app.workspace.getRightLeaf(false);
-          await leaf.setViewState({ type: "claudian-view", active: false });
+          await leaf.setViewState({ type: "claudian-view", active: true });
         }
         if (leaf && leaf.view) {
+          // If view type matches but tabManager hasn't been initialized (onOpen has not run), force it
+          if (leaf.view.getViewType() === "claudian-view" && !(leaf.view as any).tabManager) {
+            try {
+              await (leaf.view as any).onOpen();
+            } catch (openErr) {
+              console.warn("Manually triggering onOpen on ClaudianView failed", openErr);
+            }
+          }
+
           this.restoreBorrowedClaudian();
           this.borrowedClaudianEl = (leaf.view as any).contentEl;
           this.borrowedClaudianLeaf = leaf;
