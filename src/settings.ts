@@ -20,6 +20,7 @@ export interface ScriptoriumSettings {
   hamasxiangSystemPath: string;
   daemonMode: "managed" | "external";
   stopDaemonOnUnload: boolean;
+  hamasxiangWorkerToken: string;
 }
 
 export const DEFAULT_SETTINGS: ScriptoriumSettings = {
@@ -35,6 +36,7 @@ export const DEFAULT_SETTINGS: ScriptoriumSettings = {
   hamasxiangSystemPath: "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system",
   daemonMode: "managed",
   stopDaemonOnUnload: false,
+  hamasxiangWorkerToken: "",
 };
 
 export function mergeSettings(raw: Partial<ScriptoriumSettings> | null | undefined): ScriptoriumSettings {
@@ -104,14 +106,38 @@ export class ScriptoriumSettingTab extends PluginSettingTab {
       .setDesc("仅保存在本机 Obsidian 插件 data.json 中，用于 X Watch 等写操作；不要提交到代码仓库。")
       .addText(text => {
         text.inputEl.type = "password";
-        text
-          .setPlaceholder("与 hamaxiang-system/.env 保持一致")
-          .setValue(this.plugin.settings.hamasxiangDaemonToken)
-          .onChange(async value => {
-            this.plugin.settings.hamasxiangDaemonToken = value.trim();
-            this.plugin.hamasxiangAdapter.setAuthToken(value);
+        const hasToken = !!this.plugin.settings.hamasxiangDaemonToken;
+        text.setPlaceholder(hasToken ? "•••••••• (已配置，隐藏)" : "与 hamaxiang-system/.env 保持一致");
+        text.setValue("");
+        text.onChange(async value => {
+          const val = value.trim();
+          if (val) {
+            this.plugin.settings.hamasxiangDaemonToken = val;
+            this.plugin.hamasxiangAdapter.setAuthToken(val);
             await this.plugin.saveSettings();
-          });
+            text.setPlaceholder("•••••••• (已配置，隐藏)");
+            text.setValue("");
+          }
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("蛤蟆祥 Cloudflare Worker Token")
+      .setDesc("仅保存在本地，用于远端 Worker (如去重锁 /toggle-dedup) 的鉴权凭证。")
+      .addText(text => {
+        text.inputEl.type = "password";
+        const hasToken = !!this.plugin.settings.hamasxiangWorkerToken;
+        text.setPlaceholder(hasToken ? "•••••••• (已配置，隐藏)" : "与 Cloudflare Worker 密钥一致");
+        text.setValue("");
+        text.onChange(async value => {
+          const val = value.trim();
+          if (val) {
+            this.plugin.settings.hamasxiangWorkerToken = val;
+            await this.plugin.saveSettings();
+            text.setPlaceholder("•••••••• (已配置，隐藏)");
+            text.setValue("");
+          }
+        });
       });
 
     new Setting(containerEl)

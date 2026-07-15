@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit && node esbuild.config.mjs production"
+    "build": "tsc -noEmit && node esbuild.config.mjs production",
+    "test": "node scratch/test-worker-control.mjs"
   },
   "keywords": [
     "obsidian",

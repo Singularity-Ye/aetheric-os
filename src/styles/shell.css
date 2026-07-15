@@ -1362,17 +1362,42 @@ button.aos-chat-send-btn:active {
 .aos-collection-tab-btn.is-active::after {
   content: "";
   position: absolute;
-  left: 28%;
-  right: 28%;
-  bottom: 2px;
-  height: 2px;
-  border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    #c58b2b,
-    transparent
-  );
+  left: 50%;
+  bottom: -2px;
+  width: 30px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 1px 1px 4px 4px;
+  background:
+    radial-gradient(circle at 50% 50%,
+      #fff0b0 0 1px,
+      #8a5915 1.5px 2.5px,
+      transparent 3px),
+    linear-gradient(90deg,
+      #805012,
+      #c58b2b 28%,
+      #edcb79 50%,
+      #a86d19 72%,
+      #70430d);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.5),
+    0 2px 5px rgba(111,72,16,.16);
+}
+.theme-dark .aos-collection-tab-btn.is-active::after {
+  background:
+    radial-gradient(circle at 50% 50%,
+      #e2b86c 0 1px,
+      #4c310c 1.5px 2.5px,
+      transparent 3px),
+    linear-gradient(90deg,
+      #442a0a,
+      #825b1d 28%,
+      #bca05b 50%,
+      #704712 72%,
+      #3b2308);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.15),
+    0 1px 3px rgba(0,0,0,.4);
 }
 
 /* Color-coded Icon Badges */
@@ -1400,6 +1425,16 @@ button.aos-chat-send-btn:active {
   background: rgba(21, 101, 192, 0.1);
   color: #1565c0;
 }
+/* Operations: emerald green theme */
+.aos-tab-icon-badge.is-operations {
+  background: rgba(46, 125, 50, 0.1);
+  color: #2e7d32;
+}
+/* Analytics: blueprint blue theme */
+.aos-tab-icon-badge.is-analytics {
+  background: rgba(3, 105, 161, 0.1);
+  color: #0369a1;
+}
 /* Config: amber gold theme */
 .aos-tab-icon-badge.is-config {
   background: rgba(230, 81, 0, 0.1);
@@ -1413,6 +1448,14 @@ button.aos-chat-send-btn:active {
 }
 .aos-collection-tab-btn.is-active .aos-tab-icon-badge.is-sources {
   background: #1565c0;
+  color: white;
+}
+.aos-collection-tab-btn.is-active .aos-tab-icon-badge.is-operations {
+  background: #28583a;
+  color: white;
+}
+.aos-collection-tab-btn.is-active .aos-tab-icon-badge.is-analytics {
+  background: #0369a1;
   color: white;
 }
 .aos-collection-tab-btn.is-active .aos-tab-icon-badge.is-config {

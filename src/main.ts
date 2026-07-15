@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { FileSystemAdapter, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { AethericShellView, AETHERIC_SHELL_VIEW } from "./aetheric/AethericShellView";
 import { AethericStore } from "./aetheric/AethericStore";
 import { LogBus } from "./aetheric/LogBus";
@@ -12,6 +12,10 @@ import { ScriptoriumDashboardView, SCRIPTORIUM_DASHBOARD_VIEW } from "./views/Sc
 import { ChildProcess, spawn, execFile } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
+import { ProcessRegistry } from "./aetheric/operations/ProcessRegistry";
+import { WorkerControlAdapter } from "./aetheric/operations/WorkerControlAdapter";
+import { AnalyticsService } from "./aetheric/operations/AnalyticsService";
+import { HamasxiangOperationsService } from "./aetheric/operations/HamasxiangOperationsService";
 
 const HAMASXIANG_VIEW = "hamasxiang-console-view";
 
@@ -20,6 +24,8 @@ export interface DaemonProbe {
   service?: string;
   version?: string;
   activeJobs: number;
+  pid?: number;
+  instance_id?: string;
   error?: string;
 }
 
@@ -35,6 +41,21 @@ export default class ScriptoriumPlugin extends Plugin {
   daemonProcess: ChildProcess | null = null;
   daemonOwnership: DaemonOwnership = "offline";
   daemonState: "idle" | "starting" | "stopping" = "idle";
+  currentInstanceId: string | null = null;
+
+  getVaultPath(): string {
+    const adapter = this.app.vault.adapter;
+    if (adapter instanceof FileSystemAdapter) {
+      return adapter.getBasePath();
+    }
+    return "";
+  }
+
+  processRegistry!: ProcessRegistry;
+  workerControl!: WorkerControlAdapter;
+  analyticsService!: AnalyticsService;
+  hamasxiangOperations!: HamasxiangOperationsService;
+
   private saveTimer: number | null = null;
   private pollTimeout: number | null = null;
 
@@ -46,15 +67,21 @@ export default class ScriptoriumPlugin extends Plugin {
     });
     this.indexService = new VaultIndexService(this.app, this);
     this.indexService.start();
+
+    this.processRegistry = new ProcessRegistry();
+    this.workerControl = new WorkerControlAdapter(this);
+    this.analyticsService = new AnalyticsService(this);
+    this.analyticsService.start();
+    this.hamasxiangOperations = new HamasxiangOperationsService(this, this.processRegistry);
     this.hamasxiangAdapter = new HamasxiangAdapter(
       this.logBus,
       "http://127.0.0.1:8765",
       this.settings.hamasxiangDaemonToken,
     );
-    
+
     void this.cleanupExpiredTempFiles();
     void this.startDaemon();
-    
+
     let currentInterval = 15000;
     const poll = async () => {
       try {
@@ -202,6 +229,13 @@ export default class ScriptoriumPlugin extends Plugin {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     if (this.pollTimeout !== null) window.clearTimeout(this.pollTimeout);
     this.nativeUi.restore();
+    if (this.analyticsService) {
+      this.analyticsService.destroy();
+    }
+    if (this.processRegistry) {
+      // Stop only temporary preview developer servers when unloading the plugin
+      void this.processRegistry.kill("preview");
+    }
     if (this.settings.stopDaemonOnUnload) {
       void this.stopDaemon();
     }
@@ -230,6 +264,8 @@ export default class ScriptoriumPlugin extends Plugin {
           service: data.service,
           version: data.version,
           activeJobs: typeof data.active_jobs === "number" ? data.active_jobs : 0,
+          pid: typeof data.pid === "number" ? data.pid : undefined,
+          instance_id: typeof data.instance_id === "string" ? data.instance_id : undefined,
         };
       }
       return { online: false, activeJobs: 0, error: "未知服务类型" };
@@ -246,12 +282,29 @@ export default class ScriptoriumPlugin extends Plugin {
     }
     this.daemonState = "starting";
     try {
+      let savedJson: { pid?: number; instance_id?: string; started_at?: number } | null = null;
+      try {
+        const vaultPath = this.getVaultPath();
+        const pPath = path.join(vaultPath, ".obsidian", "plugins", "obsidian-scriptorium", ".managed-daemon.pid");
+        if (fs.existsSync(pPath)) {
+          savedJson = JSON.parse(fs.readFileSync(pPath, "utf-8").trim());
+        }
+      } catch (e) {}
+
       const probe = await this.probeDaemonHealth(2000);
       if (probe.online) {
-        this.daemonOwnership = "external";
-        this.daemonState = "idle";
-        this.logBus.append("success", "hamaxiang.lifecycle", "发现活动中的外部 Daemon，直接复用连接");
-        return true;
+        if (savedJson && probe.pid === savedJson.pid && probe.instance_id === savedJson.instance_id) {
+          this.daemonOwnership = "managed";
+          this.currentInstanceId = savedJson.instance_id || null;
+          this.daemonState = "idle";
+          this.logBus.append("success", "hamaxiang.lifecycle", `接管已在后台运行的天工台托管 Daemon 进程 (PID: ${probe.pid}, 实例: ${probe.instance_id})`);
+          return true;
+        } else {
+          this.daemonOwnership = "external";
+          this.daemonState = "idle";
+          this.logBus.append("success", "hamaxiang.lifecycle", `发现活动中的外部 Daemon (PID: ${probe.pid})，直接复用连接`);
+          return true;
+        }
       }
       if (this.settings.daemonMode === "external") {
         this.daemonOwnership = "offline";
@@ -272,29 +325,75 @@ export default class ScriptoriumPlugin extends Plugin {
       if (!fs.existsSync(scriptPath)) {
         throw new Error(`启动脚本未找到: ${scriptPath}`);
       }
+
+      // Generate a random instance ID for this launch
+      const randomInstanceId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      this.currentInstanceId = randomInstanceId;
+
+      const env = { ...process.env, HAMAXIANG_INSTANCE_ID: randomInstanceId };
       this.daemonProcess = spawn("python", [scriptPath], {
         cwd: systemPath,
         detached: false,
         stdio: "ignore",
+        env,
       });
+
+      // Wait for it to become online and verify instance identity
+      let spawnedOnline = false;
+      let spawnedPid: number | undefined;
+      for (let i = 0; i < 15; i++) {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        const checkProbe = await this.probeDaemonHealth(600);
+        if (checkProbe.online && checkProbe.pid && checkProbe.instance_id === randomInstanceId) {
+          spawnedOnline = true;
+          spawnedPid = checkProbe.pid;
+          // Write lock metadata atomically
+          try {
+            const vaultPath = this.getVaultPath();
+            const pPath = path.join(vaultPath, ".obsidian", "plugins", "obsidian-scriptorium", ".managed-daemon.pid");
+            fs.writeFileSync(pPath, JSON.stringify({
+              pid: checkProbe.pid,
+              instance_id: randomInstanceId,
+              started_at: Date.now()
+            }, null, 2));
+          } catch (e) {}
+          break;
+        }
+      }
+
+      if (!spawnedOnline) {
+        if (this.daemonProcess) {
+          try {
+            this.daemonProcess.kill("SIGKILL");
+          } catch (e) {}
+          this.daemonProcess = null;
+        }
+        throw new Error("启动 Daemon 后无法在限时内连通服务或实例身份不吻合。");
+      }
+
+      this.processRegistry.register("daemon", this.daemonProcess, "python", [scriptPath], systemPath);
       this.daemonProcess.on("close", (code) => {
         console.log(`[Hamasxiang Daemon] Process exited with code ${code}`);
         this.daemonProcess = null;
         this.daemonOwnership = "offline";
+        this.currentInstanceId = null;
+        try {
+          const vaultPath = this.getVaultPath();
+          const pPath = path.join(vaultPath, ".obsidian", "plugins", "obsidian-scriptorium", ".managed-daemon.pid");
+          if (fs.existsSync(pPath)) fs.unlinkSync(pPath);
+        } catch (e) {}
         this.hamasxiangAdapter.refresh(true);
       });
       this.daemonOwnership = "managed";
       this.daemonState = "idle";
-      this.logBus.append("success", "hamaxiang.lifecycle", "天工台托管：正在后台拉起本地 Daemon...");
-      window.setTimeout(() => {
-        this.hamasxiangAdapter.refresh(true);
-      }, 2000);
+      this.logBus.append("success", "hamaxiang.lifecycle", `天工台托管：本地 Daemon 成功拉起并绑定受控 (PID: ${spawnedPid}, 实例: ${randomInstanceId})`);
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.logBus.append("error", "hamaxiang.lifecycle", `启动 Daemon 失败：${msg}`);
       new Notice(`启动 Daemon 失败: ${msg}`);
       this.daemonProcess = null;
+      this.currentInstanceId = null;
       this.daemonOwnership = "offline";
       this.daemonState = "idle";
       return false;
@@ -307,21 +406,58 @@ export default class ScriptoriumPlugin extends Plugin {
       return false;
     }
     this.daemonState = "stopping";
-    if (this.daemonOwnership !== "managed" || !this.daemonProcess) {
+    if (this.daemonOwnership !== "managed") {
       this.daemonState = "idle";
       return true;
     }
-    const proc = this.daemonProcess;
-    const pid = proc.pid;
-    this.daemonProcess = null;
-    this.logBus.append("warn", "hamaxiang.lifecycle", `正在尝试停止天工台托管进程 (PID: ${pid})...`);
+
+    let savedJson: { pid?: number; instance_id?: string; started_at?: number } | null = null;
     try {
-      proc.kill();
+      const vaultPath = this.getVaultPath();
+      const pPath = path.join(vaultPath, ".obsidian", "plugins", "obsidian-scriptorium", ".managed-daemon.pid");
+      if (fs.existsSync(pPath)) {
+        savedJson = JSON.parse(fs.readFileSync(pPath, "utf-8").trim());
+      }
+    } catch (e) {}
+
+    const probe = await this.probeDaemonHealth(1000);
+    // Double check instance identity before stop
+    if (!probe.online || !savedJson || probe.pid !== savedJson.pid || probe.instance_id !== savedJson.instance_id) {
+      this.daemonState = "idle";
+      this.logBus.append("error", "hamaxiang.lifecycle", "停止 Daemon 校验失败：活动服务 PID / 实例 ID 与托管记录不符，拒绝终止");
+      new Notice("停止 Daemon 失败：当前服务所有权校验不符");
+      return false;
+    }
+
+    const procEntry = this.processRegistry.get("daemon");
+    const pid = probe.pid;
+
+    this.daemonProcess = null;
+    this.logBus.append("warn", "hamaxiang.lifecycle", `正在尝试停止天工台托管进程 (PID: ${pid}, 实例: ${probe.instance_id})...`);
+    try {
+      if (procEntry) {
+        await this.processRegistry.kill("daemon");
+      } else if (pid) {
+        // Adopted process: kill it manually
+        if (process.platform === "win32") {
+          await new Promise<void>((resolve) => {
+            execFile("taskkill", ["/PID", String(pid), "/T", "/F"], (err) => {
+              if (err) console.error("[taskkill] error:", err);
+              resolve();
+            });
+          });
+        } else {
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch (e) {}
+        }
+      }
+
       let exited = false;
       for (let i = 0; i < 6; i++) {
         await new Promise((resolve) => window.setTimeout(resolve, 500));
-        const probe = await this.probeDaemonHealth(800);
-        if (!probe.online) {
+        const probeCheck = await this.probeDaemonHealth(800);
+        if (!probeCheck.online) {
           exited = true;
           break;
         }
@@ -336,7 +472,9 @@ export default class ScriptoriumPlugin extends Plugin {
             });
           });
         } else {
-          proc.kill("SIGKILL");
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch (e) {}
         }
         await new Promise((resolve) => window.setTimeout(resolve, 500));
       }
@@ -348,7 +486,16 @@ export default class ScriptoriumPlugin extends Plugin {
         this.daemonState = "idle";
         return false;
       }
+
+      // Cleanup saved PID file
+      try {
+        const vaultPath = this.getVaultPath();
+        const pPath = path.join(vaultPath, ".obsidian", "plugins", "obsidian-scriptorium", ".managed-daemon.pid");
+        if (fs.existsSync(pPath)) fs.unlinkSync(pPath);
+      } catch (e) {}
+
       this.daemonOwnership = "offline";
+      this.currentInstanceId = null;
       this.daemonState = "idle";
       this.logBus.append("success", "hamaxiang.lifecycle", "已成功终止本地 Daemon 进程及子进程树");
       this.hamasxiangAdapter.refresh(true);

@@ -14,6 +14,8 @@ import {
 } from "obsidian";
 import ScriptoriumPlugin from "../main";
 import { CompatAdapter } from "./CompatAdapter";
+import { GitStatusItem } from "./operations/HamasxiangOperationsService";
+import { ProcessRegistryEntry } from "./operations/ProcessRegistry";
 import * as fs from "fs";
 import * as path from "path";
 import { LogDock } from "./LogDock";
@@ -57,6 +59,16 @@ export class AethericShellView extends ItemView {
   private logDock: LogDock | null = null;
   private unsubscribeIndex: (() => void) | null = null;
   private unsubscribeHamasxiang: (() => void) | null = null;
+  private unsubscribeAnalytics: (() => void) | null = null;
+  private gitChanges: GitStatusItem[] | null = [];
+  private isScanningGit = false;
+  private gitAcknowledgement = false;
+  private gitCommitMsg = "";
+  private isRunningGitSync = false;
+  private analyticsSearchQuery = "";
+  private ledgerDisplayLimit = 50;
+  private isDedupEnabled: boolean | null = null;
+  private isTogglingDedup = false;
   private contextTab: ContextTab = "overview";
   private collectionTab = "dashboard";
   private envConfig: Record<string, string> = {};
@@ -174,6 +186,8 @@ export class AethericShellView extends ItemView {
     this.unsubscribeIndex = null;
     this.unsubscribeHamasxiang?.();
     this.unsubscribeHamasxiang = null;
+    this.unsubscribeAnalytics?.();
+    this.unsubscribeAnalytics = null;
     this.contentEl.removeClass("aos-view-content");
   }
 
@@ -480,10 +494,15 @@ export class AethericShellView extends ItemView {
     this.virtualList = null;
     this.mainPane.empty();
     const module = this.plugin.store.getSnapshot().activeModule;
-    
+
     const nonNoteModules = ["collection", "tasks", "intelligence", "logs"];
     const shouldHideContext = nonNoteModules.includes(module);
     this.root.classList.toggle("aos-hide-context-pane", shouldHideContext);
+
+    // Deactivate Analytics calculation if not viewing the analytics tab
+    if (module !== "collection" || this.collectionTab !== "analytics") {
+      this.plugin.analyticsService.setActive(false);
+    }
 
     if (module === "overview") this.renderOverview();
     else if (module === "navigation") this.renderNavigation();
@@ -736,40 +755,40 @@ export class AethericShellView extends ItemView {
       private async renderContextAgent(parent: HTMLElement, node: KnowledgeNodeViewModel): Promise<void> {
     const card = parent.createDiv({ cls: "aos-context-card" });
     card.setAttribute("style", "padding: 12px; display: flex; flex-direction: column; gap: 12px;");
-    
+
     // Check if Claudian plugin is enabled
     if (CompatAdapter.isClaudianAvailable(this.app)) {
       const chatSection = card.createDiv({ cls: "aos-agent-chat-mvp" });
       chatSection.setAttribute("style", "display: flex; flex-direction: column; flex-grow: 1;");
-      
+
       const chatTitle = chatSection.createDiv({ text: "💬 Claudian 智能协同对讲机 (已融合)" });
       chatTitle.setAttribute("style", "font-size: 11px; font-weight: bold; margin-bottom: 8px; color: var(--aos-gold);");
-      
+
       const embedContainer = chatSection.createDiv({ cls: "aos-claudian-embed" });
       embedContainer.setAttribute("style", "height: 520px; display: flex; flex-direction: column; border: 1px solid var(--aos-border); border-radius: var(--aos-radius); overflow: hidden; background: var(--aos-surface-muted); justify-content: center; align-items: center; position: relative;");
-      
+
       // Spinner loader
       const loader = embedContainer.createDiv({ cls: "aos-spinner" });
       const statusText = embedContainer.createDiv({ text: "正在唤醒 Claudian 对讲机...", cls: "aos-loading-text" });
       statusText.setAttribute("style", "font-size: 10px; color: var(--aos-ink-muted); margin-top: 10px;");
-      
+
       // Increment transaction counter and capture it locally
       this.agentRenderTx++;
       const tx = this.agentRenderTx;
-      
+
       // Asynchronously instantiate and mount Claudian view to bypass race conditions
       setTimeout(async () => {
         try {
           if (tx !== this.agentRenderTx) return; // Stale transaction check
-          
+
           let leaf: any = this.app.workspace.getLeavesOfType("claudian-view")[0] || null;
           if (!leaf) {
             leaf = this.app.workspace.getRightLeaf(false);
             await leaf.setViewState({ type: "claudian-view", active: true });
           }
-          
+
           if (tx !== this.agentRenderTx) return; // Double check after async leaf creation
-          
+
           if (leaf && leaf.view) {
             if (leaf.view.getViewType() === "claudian-view" && !CompatAdapter.isClaudianViewInitialized(leaf)) {
               try {
@@ -780,7 +799,7 @@ export class AethericShellView extends ItemView {
                 console.warn("Manually triggering onOpen on ClaudianView failed", openErr);
               }
             }
-            
+
             if (tx !== this.agentRenderTx) return; // Double check after async onOpen
 
             CompatAdapter.syncClaudianContext(this.app, node.path);
@@ -790,11 +809,11 @@ export class AethericShellView extends ItemView {
             if (contentEl) {
               this.borrowedClaudianEl = contentEl;
               this.borrowedClaudianLeaf = leaf;
-              
+
               embedContainer.empty();
               embedContainer.appendChild(contentEl);
               embedContainer.setAttribute("style", "height: 520px; display: flex; flex-direction: column; border: 1px solid var(--aos-border); border-radius: var(--aos-radius); overflow: hidden; background: var(--aos-surface-muted);");
-              
+
               if (typeof (leaf.view as any).onResize === "function") {
                 try { (leaf.view as any).onResize(); } catch(e) {}
               }
@@ -810,7 +829,7 @@ export class AethericShellView extends ItemView {
           }
         }
       }, 50);
-      
+
       return;
     }
 
@@ -850,7 +869,7 @@ export class AethericShellView extends ItemView {
     chatSection.setAttribute("style", "border-top: 1px solid var(--aos-border); padding-top: 10px;");
     const chatTitle = chatSection.createDiv({ text: "💬 协同 Agent 浮窗对讲机" });
     chatTitle.setAttribute("style", "font-size: 11px; font-weight: bold; margin-bottom: 8px; color: var(--aos-gold);");
-    
+
     const chatLog = chatSection.createDiv();
     chatLog.setAttribute("style", "max-height: 240px; overflow-y: auto; background: rgba(0,0,0,0.03); border: 1px solid var(--aos-border); border-radius: 4px; padding: 8px; font-size: 10px; margin-bottom: 6px; text-align: left; display: flex; flex-direction: column; gap: 8px;");
 
@@ -881,7 +900,7 @@ export class AethericShellView extends ItemView {
         const msgEl = chatLog.createDiv();
         const isUser = sender.trim().toLowerCase() === "user";
         const isSystem = sender.trim().toLowerCase() === "system";
-        
+
         if (isUser) {
           msgEl.setAttribute("style", "align-self: flex-end; max-width: 85%; margin-bottom: 2px; text-align: right;");
           const span = msgEl.createSpan({ cls: "aos-chat-bubble-user" });
@@ -904,7 +923,7 @@ export class AethericShellView extends ItemView {
         msgEl.setAttribute("style", "color: var(--aos-ink-muted); font-style: italic; font-size: 9px;");
       }
     }
-    
+
     setTimeout(() => {
       chatLog.scrollTop = chatLog.scrollHeight;
     }, 50);
@@ -915,7 +934,7 @@ export class AethericShellView extends ItemView {
     chatInput.setAttribute("style", "flex: 1; font-size: 10px; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--aos-border); background: var(--aos-surface); color: var(--aos-ink);");
     const sendBtn = inputRow.createEl("button", { cls: "aos-chat-send-btn", text: "发送" });
     sendBtn.setAttribute("style", "font-size: 10px; height: 26px; padding: 0 10px; font-weight: bold; border-radius: 6px; border: 1px solid var(--aos-border); background: var(--aos-surface); cursor: pointer;");
-    
+
     const handleSend = async () => {
       const question = chatInput.value.trim();
       if (!question) return;
@@ -1028,7 +1047,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
       const stat = await fs.promises.stat(envPath);
       this.envLastModified = stat.mtimeMs;
-      
+
       const content = await fs.promises.readFile(envPath, "utf-8");
       const config: Record<string, string> = {};
       const lines = content.split(/\r?\n/);
@@ -1057,7 +1076,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const timestamp = Date.now();
     const pid = process.pid;
     const tempPath = path.join(systemPath, `.env.tmp-${pid}-${timestamp}`);
-    
+
     try {
       if (fs.existsSync(envPath)) {
         const stat = await fs.promises.stat(envPath);
@@ -1065,13 +1084,13 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           throw new Error("检测到配置文件冲突：该文件已被外部修改，为了防止覆盖，已中止本次保存。请刷新页面后重试！");
         }
       }
-      
+
       let content = "";
       if (fs.existsSync(envPath)) {
         content = await fs.promises.readFile(envPath, "utf-8");
       }
       const lines = content.split(/\r?\n/);
-      
+
       const whitelist = new Set([
         "X_WATCH_HANDLES",
         "HTTP_PROXY",
@@ -1080,9 +1099,9 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         "DEEPSEEK_API_KEY",
         "GROQ_API_KEY"
       ]);
-      
+
       const keysToUpdate = new Set(Object.keys(updates).filter(k => whitelist.has(k)));
-      
+
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const trimmed = line.trim();
@@ -1101,20 +1120,20 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           }
         }
       }
-      
+
       for (const key of keysToUpdate) {
         if ((key === "DEEPSEEK_API_KEY" || key === "GROQ_API_KEY") && !updates[key]) {
           continue;
         }
         lines.push(`${key}=${updates[key]}`);
       }
-      
+
       await fs.promises.writeFile(tempPath, lines.join("\n"), "utf-8");
       await fs.promises.rename(tempPath, envPath);
-      
+
       const newStat = await fs.promises.stat(envPath);
       this.envLastModified = newStat.mtimeMs;
-      
+
       for (const key of Object.keys(updates)) {
         if (updates[key] || !(key === "DEEPSEEK_API_KEY" || key === "GROQ_API_KEY")) {
           this.envConfig[key] = updates[key];
@@ -1140,9 +1159,11 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const tabs = [
       { id: "dashboard", icon: "gauge", label: "运行看板" },
       { id: "sources", icon: "radio", label: "数据源与任务" },
+      { id: "operations", icon: "wrench", label: "工造中枢" },
+      { id: "analytics", icon: "line-chart", label: "卷宗分析" },
       { id: "config", icon: "sliders", label: "环境配置" }
     ];
-    
+
     tabs.forEach(tab => {
       const btn = tabRow.createEl("button", {
         cls: `aos-collection-tab-btn ${this.collectionTab === tab.id ? "is-active" : ""}`
@@ -1152,6 +1173,22 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       btn.createSpan({ cls: "aos-tab-label", text: tab.label });
       btn.addEventListener("click", async () => {
         this.collectionTab = tab.id;
+
+        // Toggle Analytics active state
+        if (tab.id === "analytics") {
+          this.plugin.analyticsService.setActive(true);
+          // Subscribe if not subscribed
+          if (!this.unsubscribeAnalytics) {
+            this.unsubscribeAnalytics = this.plugin.analyticsService.subscribe(() => {
+              if (this.collectionTab === "analytics") {
+                this.renderCollection();
+              }
+            });
+          }
+        } else {
+          this.plugin.analyticsService.setActive(false);
+        }
+
         if (tab.id === "config" || tab.id === "sources") {
           await this.loadEnvConfig();
         }
@@ -1163,6 +1200,16 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       void this.loadEnvConfig().then(() => this.renderCollection());
     }
 
+    // Auto-polling re-render if background tasks are running
+    const activeProcs = this.plugin.processRegistry.list();
+    if (activeProcs.length > 0) {
+      window.setTimeout(() => {
+        if (this.collectionTab === "operations" || this.collectionTab === "analytics") {
+          this.renderCollection();
+        }
+      }, 1000);
+    }
+
     if (this.collectionTab === "dashboard") {
       this.renderCollectionDashboard(page, snapshot);
     } else if (this.collectionTab === "sources") {
@@ -1171,6 +1218,10 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       } else {
         this.renderCollectionSources(page, snapshot);
       }
+    } else if (this.collectionTab === "operations") {
+      this.renderCollectionOperations(page);
+    } else if (this.collectionTab === "analytics") {
+      this.renderCollectionAnalytics(page);
     } else {
       if (this.envLoading) {
         page.createDiv({ cls: "aos-spinner-small" });
@@ -1185,14 +1236,14 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     hero.createDiv({ cls: "aos-hamasxiang-mark", text: "🐸" });
     const intro = hero.createDiv();
     intro.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥 · 本地 Daemon 托管面板" });
-    
+
     const owner = this.plugin.daemonOwnership;
     let daemonDetailText = "服务离线";
     if (owner === "managed") daemonDetailText = "天工台单实例进程守护中";
     else if (owner === "external") daemonDetailText = "复用外部活动进程运行中";
-    
+
     intro.createDiv({ cls: "aos-panel-note", text: `Daemon 状态: ${daemonDetailText}` });
-    
+
     const badge = hero.createSpan({ cls: `aos-service-badge ${snapshot.online ? "is-online" : "is-offline"}` });
     badge.createSpan({ cls: "aos-badge-dot" });
     badge.createSpan({ text: snapshot.online ? "本地 Daemon 在线" : "本地 Daemon 离线" });
@@ -1211,12 +1262,70 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const controlRow = page.createDiv({ cls: "aos-action-row aos-daemon-controls" });
     this.actionButton(controlRow, "刷新炉火", () => void this.plugin.hamasxiangAdapter.refresh(true));
     this.actionButton(controlRow, "立即巡逻 X", () => void this.runXWatch());
-    
+
     if (!snapshot.online) {
       this.actionButton(controlRow, "🚀 启动 Daemon", () => void this.plugin.startDaemon());
     } else if (owner === "managed") {
       this.actionButton(controlRow, "🛑 停止 Daemon", () => void this.plugin.stopDaemon());
     }
+
+    // Dedup Lock Status loading
+    if (this.isDedupEnabled === null && !this.isTogglingDedup && snapshot.online) {
+      this.isTogglingDedup = true;
+      this.plugin.workerControl.fetchStatus()
+        .then(enabled => {
+          this.isDedupEnabled = enabled;
+          this.isTogglingDedup = false;
+          this.renderCollection();
+        })
+        .catch(err => {
+          this.isTogglingDedup = false;
+          console.error("[Dedup Lock]", err.message);
+        });
+    }
+
+    let dedupLabelText = "去重锁 · 离线";
+    if (snapshot.online) {
+      if (this.isDedupEnabled === null) {
+        dedupLabelText = "去重锁 · 检查中...";
+      } else {
+        dedupLabelText = this.isDedupEnabled ? "🔒 去重锁 · 已开启" : "🔓 去重锁 · 已禁用";
+      }
+    }
+
+    const dedupBtn = controlRow.createEl("button", {
+      cls: "aos-action-button",
+      text: dedupLabelText
+    });
+    if (!snapshot.online || this.isDedupEnabled === null || this.isTogglingDedup) {
+      dedupBtn.setAttribute("disabled", "true");
+    }
+
+    if (snapshot.online && this.isDedupEnabled === true) {
+      dedupBtn.style.cssText = "background: rgba(40, 88, 58, 0.1) !important; border-color: rgba(40, 88, 58, 0.3) !important; color: #28583a !important;";
+    }
+
+    dedupBtn.addEventListener("click", async () => {
+      if (!snapshot.online || this.isDedupEnabled === null || this.isTogglingDedup) return;
+      this.isTogglingDedup = true;
+      const originalState = this.isDedupEnabled;
+      // Optimistic UI update
+      this.isDedupEnabled = !originalState;
+      this.renderCollection();
+
+      try {
+        const newEnabled = await this.plugin.workerControl.toggleStatus(originalState);
+        this.isDedupEnabled = newEnabled;
+        new Notice(newEnabled ? "🔒 1h 去重锁已成功开启" : "🔓 1h 去重锁已成功禁用");
+      } catch (err: any) {
+        // Rollback on error
+        this.isDedupEnabled = originalState;
+        new Notice(err.message);
+      } finally {
+        this.isTogglingDedup = false;
+        this.renderCollection();
+      }
+    });
 
     const metrics = page.createDiv({ cls: "aos-metric-grid aos-adapter-metrics" });
     this.metric(metrics, "端口", snapshot.online ? "8765" : "未连接", snapshot.online ? "127.0.0.1 · hamaxiang-daemon" : "服务离线");
@@ -1227,7 +1336,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     const grid = page.createDiv({ cls: "aos-collection-grid" });
     const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
-    
+
     // Top-row: Left card Tasks
     const taskPanel = leftPane.createDiv({ cls: "aos-panel" });
     taskPanel.createDiv({ cls: "aos-panel-title", text: "采集任务快照" });
@@ -1280,7 +1389,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const logsContainer = logPanel.createDiv({ cls: "aos-daemon-logs-console" });
     const allLogs = this.plugin.logBus.getEntries();
     const daemonLogs = allLogs.filter(entry => entry.source.startsWith("hamaxiang") || entry.source.startsWith("hamasxiang"));
-    
+
     if (daemonLogs.length === 0) {
       logsContainer.createDiv({ cls: "aos-empty-logs", text: "暂无 Daemon 事件日志，等待后台触发或启动服务。" });
     } else {
@@ -1323,11 +1432,11 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const env = this.envConfig;
     const grid = page.createDiv({ cls: "aos-collection-grid" });
     const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
-    
+
     const xPanel = leftPane.createDiv({ cls: "aos-panel" });
     xPanel.createDiv({ cls: "aos-panel-title", text: "📡 Twitter/X 情报数据源" });
     xPanel.createDiv({ cls: "aos-panel-note", text: "配置要巡逻的 X 账号句柄列表（从 Daemon .env 读取）" });
-    
+
     // Add config drift alert warning
     const diskHandles = this.normalizeHandlesStr(env["X_WATCH_HANDLES"]);
     const memHandles = this.normalizeHandlesStr(snapshot.xWatch?.handles);
@@ -1339,18 +1448,18 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         text: this.getDriftWarningText(diskHandles, memHandles, snapshot.activeJobs, this.plugin.daemonOwnership)
       });
     }
-    
+
     const handlesStr = env["X_WATCH_HANDLES"] || "";
     const handles = handlesStr.split(",").map(h => h.trim()).filter(Boolean);
     const tagsContainer = xPanel.createDiv({ cls: "aos-x-handles-tags" });
-    
+
     if (handles.length === 0) {
       tagsContainer.createDiv({ cls: "aos-empty-state", text: "当前未配置任何巡逻账号" });
     } else {
       handles.forEach(handle => {
         const tag = tagsContainer.createDiv({ cls: "aos-x-handle-tag" });
         tag.createSpan({ text: `@${handle}` });
-        
+
         // Single handle test button
         const testBtn = tag.createSpan({ cls: "test-btn", text: "▶" });
         testBtn.setAttribute("title", `测试单源抓取 @${handle}`);
@@ -1407,11 +1516,595 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
     const guideCard = rightPane.createDiv({ cls: "aos-panel" });
     guideCard.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥数据捕获说明" });
-    
+
     const infoList = guideCard.createEl("ul", { cls: "aos-guide-list" });
     infoList.createEl("li", { text: "ASR 引擎已设置为 Groq/Douyin 本地端点进行双轨自查。" });
     infoList.createEl("li", { text: "X Watch 巡逻使用 Playwright 模拟真实浏览器，支持 headless 隐身模式。" });
     infoList.createEl("li", { text: "收集箱数据会自动同步至松果天工台的[情报]与[最近产物]列表中。" });
+  }
+
+  private renderCollectionOperations(page: HTMLDivElement): void {
+    const grid = page.createDiv({ cls: "aos-collection-grid" });
+    const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
+    const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
+
+    // Left Panel 1: 仙术与重修法阵
+    const opsPanel = leftPane.createDiv({ cls: "aos-panel" });
+    opsPanel.createDiv({ cls: "aos-panel-title", text: "🔮 仙术与重修法阵" });
+    opsPanel.createDiv({ cls: "aos-panel-note", text: "触发收件箱的抓取、云端同步、ASR 字幕精修与淬炼隔离等仙术法阵" });
+
+    // Row 1: 网页参悟 (Manual Grab URL)
+    const grabSection = opsPanel.createDiv({ cls: "aos-grab-section" });
+    grabSection.style.cssText = "margin-bottom: 12px; padding: 10px; border: 1px dashed var(--aos-border-gold); border-radius: 6px; background: rgba(197, 139, 43, 0.03);";
+    grabSection.createDiv({ cls: "aos-section-label", text: "📖 网页参悟" }).style.cssText = "font-weight: bold; font-size: 12px; margin-bottom: 6px; color: var(--aos-ink-gold);";
+
+    const grabRow = grabSection.createDiv({ cls: "aos-grab-row" });
+    grabRow.style.cssText = "display: flex; gap: 8px; align-items: center;";
+    const grabInput = grabRow.createEl("input", {
+      cls: "aos-grab-input",
+      attr: { placeholder: "请输入网页 URL (支持抖音/B站/小红书/网页)" }
+    });
+    grabInput.style.cssText = "flex: 1; padding: 6px; font-size: 12px;";
+
+    const forceLabel = grabRow.createEl("label");
+    forceLabel.style.cssText = "font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap;";
+    const forceCheck = forceLabel.createEl("input", { attr: { type: "checkbox" } });
+    forceLabel.createSpan({ text: "强制覆写" });
+
+    const grabBtn = grabRow.createEl("button", { cls: "aos-btn", text: "参悟" });
+    grabBtn.style.cssText = "padding: 6px 12px; font-size: 12px;";
+    grabBtn.addEventListener("click", () => {
+      const url = grabInput.value.trim();
+      if (!url) {
+        new Notice("请输入需要参悟的网页链接！");
+        return;
+      }
+      try {
+        this.plugin.hamasxiangOperations.runManualGrab(url, forceCheck.checked);
+        grabInput.value = "";
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    // Row 2: Standard buttons
+    const btnGrid = opsPanel.createDiv();
+    btnGrid.style.cssText = "display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;";
+
+    const syncBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "📥 感应并拉取云端" });
+    syncBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.runSync();
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    const repairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "🛠️ 一键全库 ASR 精修" });
+    repairBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.runRepair();
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    const biliRepairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "📺 B站 ASR 修复" });
+    biliRepairBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.runPlatformRepair("bilibili");
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    const dyRepairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "🎵 抖音 ASR 修复" });
+    dyRepairBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.runPlatformRepair("douyin");
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    const quarantineBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "🧪 淬炼隔离" });
+    quarantineBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.runQuarantine();
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    const restoreBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "📜 还原残卷" });
+    restoreBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.runRestore();
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    // Left Panel 2: 本地预览与发布
+    const previewPanel = leftPane.createDiv({ cls: "aos-panel" });
+    previewPanel.style.cssText = "margin-top: 14px;";
+    previewPanel.createDiv({ cls: "aos-panel-title", text: "🌍 本地预览与发布" });
+    previewPanel.createDiv({ cls: "aos-panel-note", text: "编译生成个人博客的图谱拓扑或启动本地开发服务器进行静态预览" });
+
+    const previewGrid = previewPanel.createDiv();
+    previewGrid.style.cssText = "display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;";
+
+    const publishBtn = previewGrid.createEl("button", { cls: "aos-btn", text: "⚙️ 编译图谱 (Astro)" });
+    publishBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.runPublish();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    const isPreviewRunning = this.plugin.processRegistry.isRunning("preview");
+    const previewToggleBtn = previewGrid.createEl("button", {
+      cls: `aos-btn ${isPreviewRunning ? "is-danger" : ""}`,
+      text: isPreviewRunning ? "⏹️ 关闭预览服务" : "▶️ 开启本地预览"
+    });
+    if (isPreviewRunning) {
+      previewToggleBtn.style.cssText = "background: rgba(239, 68, 68, 0.1) !important; border: 1px solid rgba(239, 68, 68, 0.4) !important; color: #ef4444 !important;";
+    }
+    previewToggleBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.toggleDevServer();
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    // Right Panel 1: Git 安全归档备份
+    const gitPanel = rightPane.createDiv({ cls: "aos-panel" });
+    gitPanel.createDiv({ cls: "aos-panel-title", text: "🛡️ Git 安全归档备份" });
+    gitPanel.createDiv({ cls: "aos-panel-note", text: "扫描仓库变更，预防敏感密钥泄漏，执行二次确认安全提交与备份" });
+
+    const gitActionsRow = gitPanel.createDiv();
+    gitActionsRow.style.cssText = "display: flex; gap: 8px; margin-top: 10px; margin-bottom: 12px;";
+
+    const scanBtn = gitActionsRow.createEl("button", {
+      cls: `aos-btn ${this.isScanningGit ? "is-loading" : ""}`,
+      text: this.isScanningGit ? "🔍 扫描中..." : "🔍 扫描工作区变更"
+    });
+    scanBtn.addEventListener("click", async () => {
+      this.isScanningGit = true;
+      this.renderCollection();
+      try {
+        this.gitChanges = await this.plugin.hamasxiangOperations.checkGitStatus();
+        this.gitAcknowledgement = false;
+        // Pre-fill default commit message
+        this.gitCommitMsg = `卷宗入藏与工造备份 ${new Date().toLocaleString()}`;
+      } catch (err: any) {
+        new Notice(`扫描失败: ${err.message}`);
+      } finally {
+        this.isScanningGit = false;
+        this.renderCollection();
+      }
+    });
+
+    const isRunningGit = this.plugin.processRegistry.isRunning("git");
+    const remoteSyncBtn = gitActionsRow.createEl("button", {
+      cls: "aos-btn",
+      text: "🔱 远端同步 (Pull & Push)"
+    });
+    if (isRunningGit) remoteSyncBtn.setAttribute("disabled", "true");
+    remoteSyncBtn.addEventListener("click", async () => {
+      try {
+        new Notice("开始远端 Git 同步 (pull & push)...");
+        await this.plugin.hamasxiangOperations.runGitSyncRemote();
+      } catch (err: any) {
+        new Notice(err.message);
+      } finally {
+        this.renderCollection();
+      }
+    });
+
+    if (this.gitChanges === null) {
+      const errorBlock = gitPanel.createDiv();
+      errorBlock.style.cssText = "margin-bottom: 12px; padding: 8px 12px; background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; border-radius: 4px; font-size: 11px; color: #ef4444; line-height: 1.4;";
+      errorBlock.createDiv({ text: "⚠️ 扫描失败：Git 状态检查异常退出。" }).style.cssText = "font-weight: bold; margin-bottom: 4px;";
+      errorBlock.createDiv({ text: "可能是当前目录非 Git 仓库，或者包含未决冲突，亦或是网络原因无法连接远端 origin。请在终端解决冲突或检查配置。" });
+    } else if (this.gitChanges.length > 0) {
+      const changeHeader = gitPanel.createDiv();
+      changeHeader.style.cssText = "font-size: 11px; font-weight: bold; margin-bottom: 6px; color: var(--aos-ink-muted);";
+      changeHeader.setText(`工作区检出 ${this.gitChanges.length} 处变更:`);
+
+      const listDiv = gitPanel.createDiv();
+      listDiv.style.cssText = "max-height: 150px; overflow-y: auto; border: 1px solid var(--aos-border); border-radius: 6px; padding: 4px; background: rgba(0,0,0,0.05); margin-bottom: 12px;";
+
+      let hasSensitive = false;
+      this.gitChanges.forEach(item => {
+        const row = listDiv.createDiv();
+        row.style.cssText = "display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 3px 6px; border-bottom: 1px solid rgba(0,0,0,0.03);";
+        if (item.isSensitive) {
+          hasSensitive = true;
+          row.style.cssText += "background: rgba(239, 68, 68, 0.08); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 4px; margin-bottom: 2px;";
+        }
+
+        const left = row.createSpan();
+        const statSpan = left.createSpan();
+        statSpan.style.cssText = `font-weight: bold; margin-right: 6px; color: ${item.status === "??" ? "#0369a1" : item.status === "D" ? "#ef4444" : "#28583a"};`;
+        statSpan.setText(item.status);
+        left.createSpan({ text: item.path });
+
+        if (item.isSensitive) {
+          const badge = row.createSpan({ cls: "aos-badge is-error", text: `⚠️ 敏感警告: ${item.reason}` });
+          badge.style.cssText = "font-size: 9px; padding: 1px 4px; border-radius: 3px; background: rgba(239, 68, 68, 0.2); color: #ef4444;";
+        }
+      });
+
+      if (hasSensitive) {
+        const warnBlock = gitPanel.createDiv();
+        warnBlock.style.cssText = "margin-bottom: 12px; padding: 8px 12px; background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; border-radius: 4px; font-size: 11px; color: #ef4444; line-height: 1.4;";
+        warnBlock.createDiv({ text: "⚠️ 警告：检测到未提交的敏感文件（如 .env 或临时测试垃圾）。" }).style.cssText = "font-weight: bold; margin-bottom: 4px;";
+        warnBlock.createDiv({ text: "为了您的数据与隐私安全，已锁定一键备份功能。请先通过终端或 Git 工具处理敏感文件，或在排除列表 (.gitignore) 中将其屏蔽后再行备份。" });
+      } else {
+        // Commit message input
+        const msgDiv = gitPanel.createDiv();
+        msgDiv.style.cssText = "margin-bottom: 10px;";
+        msgDiv.createDiv({ text: "提交说明:" }).style.cssText = "font-size: 11px; margin-bottom: 3px; font-weight: bold; color: var(--aos-ink-muted);";
+        const msgInput = msgDiv.createEl("input", {
+          attr: { type: "text", value: this.gitCommitMsg }
+        });
+        msgInput.style.cssText = "width: 100%; padding: 6px; font-size: 12px;";
+        msgInput.addEventListener("input", () => {
+          this.gitCommitMsg = msgInput.value;
+        });
+
+        // Acknowledgement Checkbox
+        const ackLabel = gitPanel.createEl("label");
+        ackLabel.style.cssText = "font-size: 11px; display: flex; align-items: flex-start; gap: 6px; margin-bottom: 12px; cursor: pointer; line-height: 1.3; color: var(--aos-ink-muted);";
+        const ackCheck = ackLabel.createEl("input", { attr: { type: "checkbox" } });
+        ackCheck.checked = this.gitAcknowledgement;
+        ackLabel.createSpan({ text: "我已确认待暂存的变更不含任何敏感密钥/测试垃圾，且当前网络状态健康。" });
+
+        const backupBtn = gitPanel.createEl("button", {
+          cls: "aos-btn",
+          text: "🚀 启动 Git 备份并本地提交"
+        });
+        backupBtn.style.cssText = "width: 100%; padding: 8px; font-weight: bold; background: rgba(40, 88, 58, 0.1) !important; border: 1px solid rgba(40, 88, 58, 0.4) !important; color: #28583a !important;";
+        backupBtn.toggle(this.gitAcknowledgement && !isRunningGit);
+
+        ackCheck.addEventListener("change", () => {
+          this.gitAcknowledgement = ackCheck.checked;
+          backupBtn.toggle(this.gitAcknowledgement && !isRunningGit);
+        });
+
+        backupBtn.addEventListener("click", async () => {
+          try {
+            const files = (this.gitChanges || []).map(c => c.path);
+            new Notice("正在启动本地 Git 备份归档...");
+            const ok = await this.plugin.hamasxiangOperations.runGitBackup(files, this.gitCommitMsg);
+            if (ok) {
+              new Notice("本地 Git 备份归档完成！");
+              this.gitChanges = [];
+              this.gitAcknowledgement = false;
+            }
+          } catch (err: any) {
+            new Notice(err.message);
+          } finally {
+            this.renderCollection();
+          }
+        });
+      }
+    } else {
+      const emptyDiv = gitPanel.createDiv({ cls: "aos-empty-state" });
+      emptyDiv.style.cssText = "font-size: 11px; text-align: center; color: var(--aos-ink-muted); padding: 20px 0;";
+      emptyDiv.setText("已完成工作区扫描，暂未发现变更。工作区干净。");
+    }
+
+    // Right Panel 2: 法阵运行日志与监控 (Active Processes Monitor)
+    const monitorPanel = rightPane.createDiv({ cls: "aos-panel" });
+    monitorPanel.style.cssText = "margin-top: 14px;";
+    monitorPanel.createDiv({ cls: "aos-panel-title", text: "📊 法阵运行监控" });
+    monitorPanel.createDiv({ cls: "aos-panel-note", text: "实时查看天工台托管进程的进度、状态及控制" });
+
+    const activeProcesses = this.plugin.processRegistry.list();
+    // Filter out daemon from general user monitors
+    const userProcesses = activeProcesses.filter((p: ProcessRegistryEntry) => p.taskType !== "daemon");
+
+    if (userProcesses.length === 0) {
+      const emptyDiv = monitorPanel.createDiv({ cls: "aos-empty-state" });
+      emptyDiv.style.cssText = "font-size: 11px; text-align: center; color: var(--aos-ink-muted); padding: 20px 0;";
+      emptyDiv.setText("当前无任何活动仙术法阵在运行中");
+    } else {
+      const procList = monitorPanel.createDiv();
+      procList.style.cssText = "display: flex; flex-direction: column; gap: 10px; margin-top: 10px;";
+
+      userProcesses.forEach((proc: ProcessRegistryEntry) => {
+        const pCard = procList.createDiv();
+        pCard.style.cssText = "border: 1px solid var(--aos-border); border-radius: 6px; padding: 10px; background: rgba(0,0,0,0.02);";
+
+        const topRow = pCard.createDiv();
+        topRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;";
+
+        const titleDiv = topRow.createDiv();
+        const typeBadge = titleDiv.createSpan();
+        typeBadge.style.cssText = "font-size: 9px; font-weight: bold; text-transform: uppercase; background: #0369a1; color: white; padding: 2px 5px; border-radius: 3px; margin-right: 6px;";
+        typeBadge.setText(proc.taskType);
+
+        titleDiv.createSpan({ text: `PID: ${proc.process.pid}` }).style.cssText = "font-size: 11px; color: var(--aos-ink-muted);";
+
+        const elapsed = Math.round((Date.now() - proc.startedAt) / 1000);
+        const timeSpan = topRow.createSpan({ text: `已运行 ${elapsed} 秒` });
+        timeSpan.style.cssText = "font-size: 11px; color: var(--aos-ink-muted);";
+
+        // Progress bar
+        const prog = this.plugin.hamasxiangOperations.getLastProgress(proc.taskType);
+        const barContainer = pCard.createDiv();
+        barContainer.style.cssText = "height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden; margin: 8px 0;";
+
+        const bar = barContainer.createDiv();
+        bar.style.cssText = "height: 100%; background: var(--aos-blueprint); width: 0%; transition: width 0.3s ease;";
+
+        const descRow = pCard.createDiv();
+        descRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; font-size: 11px;";
+
+        const desc = descRow.createSpan();
+        desc.style.cssText = "color: var(--aos-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;";
+
+        if (prog) {
+          const pct = Math.round((prog.current / prog.total) * 100);
+          bar.style.width = `${pct}%`;
+          desc.setText(`${prog.stage}: ${prog.current}/${prog.total}`);
+          descRow.createSpan({ text: `${pct}%` }).style.cssText = "font-weight: bold; color: var(--aos-ink);";
+        } else {
+          // Indeterminate state
+          bar.style.width = "40%";
+          bar.style.background = "repeating-linear-gradient(45deg, var(--aos-blueprint), var(--aos-blueprint) 10px, rgba(3,105,161,0.5) 10px, rgba(3,105,161,0.5) 20px)";
+          desc.setText("正在执行中，等待流式输出...");
+        }
+
+        const controlRow = pCard.createDiv();
+        controlRow.style.cssText = "margin-top: 8px; text-align: right;";
+        const killBtn = controlRow.createEl("button", {
+          cls: "aos-btn",
+          text: "⏹️ 中止法阵"
+        });
+        killBtn.style.cssText = "padding: 3px 8px; font-size: 10px; background: rgba(239, 68, 68, 0.08) !important; border: 1px solid rgba(239, 68, 68, 0.3) !important; color: #ef4444 !important;";
+        killBtn.addEventListener("click", async () => {
+          new Notice(`正在中止 PID ${proc.process.pid} (${proc.taskType})...`);
+          await this.plugin.processRegistry.kill(proc.taskType);
+          this.renderCollection();
+        });
+      });
+    }
+  }
+
+  private renderCollectionAnalytics(page: HTMLDivElement): void {
+    const snap = this.plugin.analyticsService.getSnapshot();
+
+    const grid = page.createDiv({ cls: "aos-collection-grid" });
+    const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
+    const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
+
+    // Left Pane Card 1: 卷宗体量与审计
+    const statsCard = leftPane.createDiv({ cls: "aos-panel" });
+    statsCard.createDiv({ cls: "aos-panel-title", text: "📊 卷宗体量与审计" });
+    statsCard.createDiv({ cls: "aos-panel-note", text: "收件箱中待整理卷宗的总体审计与健康度指标" });
+
+    // Stats Grid
+    const statGrid = statsCard.createDiv();
+    statGrid.style.cssText = "display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; margin-bottom: 14px;";
+
+    const makeStatBox = (parent: HTMLDivElement, label: string, val: string | number, borderCol = "var(--aos-border)") => {
+      const box = parent.createDiv();
+      box.style.cssText = `border: 1px solid ${borderCol}; border-radius: 6px; padding: 10px; text-align: center; background: rgba(0,0,0,0.01);`;
+      box.createDiv({ text: label }).style.cssText = "font-size: 10px; font-weight: bold; color: var(--aos-ink-muted); margin-bottom: 4px;";
+      box.createDiv({ text: String(val) }).style.cssText = "font-size: 18px; font-weight: 800; color: var(--aos-ink);";
+    };
+
+    makeStatBox(statGrid, "池中卷宗总数", snap.totalNotes, "var(--aos-border-blueprint)");
+    makeStatBox(statGrid, "今日新增卷宗", snap.todayNotes, "var(--aos-border-green)");
+    makeStatBox(statGrid, "ASR 故障挂起", snap.evidenceCounts.asr_failed + snap.evidenceCounts.asr_pending, snap.evidenceCounts.asr_failed > 0 ? "rgba(239, 68, 68, 0.4)" : "var(--aos-border)");
+
+    // Evidence Audit Details
+    statsCard.createDiv({ text: "🔍 证据等级健康审计:" }).style.cssText = "font-size: 11px; font-weight: bold; margin-bottom: 6px; color: var(--aos-ink-muted);";
+    const auditRow = statsCard.createDiv();
+    auditRow.style.cssText = "display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 11px;";
+
+    const makeAuditLabel = (parent: HTMLDivElement, text: string, count: number, cls: string) => {
+      const row = parent.createDiv();
+      row.style.cssText = "display: flex; justify-content: space-between; padding: 4px 6px; border-bottom: 1px solid rgba(0,0,0,0.02);";
+      row.createSpan({ text });
+      const badge = row.createSpan({ text: String(count) });
+      badge.style.cssText = "font-weight: bold; border-radius: 3px; padding: 1px 4px;";
+      if (cls === "green") badge.style.cssText += "background: rgba(40, 88, 58, 0.15); color: #28583a;";
+      else if (cls === "amber") badge.style.cssText += "background: rgba(197, 139, 43, 0.15); color: #c58b2b;";
+      else if (cls === "red") badge.style.cssText += "background: rgba(239, 68, 68, 0.15); color: #ef4444;";
+      else if (cls === "blue") badge.style.cssText += "background: rgba(3, 105, 161, 0.15); color: #0369a1;";
+      else badge.style.cssText += "background: rgba(0,0,0,0.05); color: var(--aos-ink-muted);";
+    };
+
+    makeAuditLabel(auditRow, "完整双轨字幕 (subtitle_full)", snap.evidenceCounts.subtitle_full, "green");
+    makeAuditLabel(auditRow, "不稳双轨字幕 (subtitle_unstable)", snap.evidenceCounts.subtitle_unstable, "amber");
+    makeAuditLabel(auditRow, "低置信双轨字幕 (subtitle_suspect)", snap.evidenceCounts.subtitle_suspect, "red");
+    makeAuditLabel(auditRow, "元数据大纲 (toc_metadata)", snap.evidenceCounts.toc_metadata, "blue");
+    makeAuditLabel(auditRow, "ASR 等待中 (asr_pending)", snap.evidenceCounts.asr_pending, "gray");
+    makeAuditLabel(auditRow, "ASR 故障挂死 (asr_failed)", snap.evidenceCounts.asr_failed, "red");
+
+    // Left Pane Card 2: 分流与平台特征分布
+    const distCard = leftPane.createDiv({ cls: "aos-panel" });
+    distCard.style.cssText = "margin-top: 14px;";
+    distCard.createDiv({ cls: "aos-panel-title", text: "📐 分流与数据源结构" });
+
+    // Category list progress bars
+    distCard.createDiv({ text: "分流建议方向分布:" }).style.cssText = "font-size: 11px; font-weight: bold; margin-bottom: 8px; margin-top: 6px; color: var(--aos-ink-muted);";
+    const catList = distCard.createDiv();
+    catList.style.cssText = "display: flex; flex-direction: column; gap: 6px;";
+
+    const categories = Object.keys(snap.categoryCounts).sort((a, b) => snap.categoryCounts[b] - snap.categoryCounts[a]);
+    categories.forEach(cat => {
+      const count = snap.categoryCounts[cat];
+      if (count === 0) return;
+      const pct = snap.totalNotes > 0 ? Math.round((count / snap.totalNotes) * 100) : 0;
+
+      const row = catList.createDiv();
+      row.style.cssText = "font-size: 11px; display: flex; flex-direction: column; gap: 2px;";
+
+      const top = row.createDiv();
+      top.style.cssText = "display: flex; justify-content: space-between;";
+      top.createSpan({ text: cat });
+      top.createSpan({ text: `${count} 篇 (${pct}%)` }).style.cssText = "font-weight: bold;";
+
+      const barWrap = row.createDiv();
+      barWrap.style.cssText = "height: 4px; background: rgba(0,0,0,0.06); border-radius: 2px; overflow: hidden;";
+      const barInner = barWrap.createDiv();
+      barInner.style.cssText = `height: 100%; background: var(--aos-blueprint); width: ${pct}%;`;
+    });
+
+    // Platform distribution
+    distCard.createDiv({ text: "数据源平台分布:" }).style.cssText = "font-size: 11px; font-weight: bold; margin-bottom: 8px; margin-top: 12px; color: var(--aos-ink-muted);";
+    const platRow = distCard.createDiv();
+    platRow.style.cssText = "display: flex; gap: 8px; justify-content: space-between; font-size: 11px;";
+
+    Object.keys(snap.platformCounts).forEach(plat => {
+      const count = snap.platformCounts[plat];
+      const box = platRow.createDiv();
+      box.style.cssText = "flex: 1; border: 1px solid var(--aos-border); border-radius: 4px; padding: 6px; text-align: center;";
+      box.createDiv({ text: plat }).style.cssText = "color: var(--aos-ink-muted); font-size: 10px; margin-bottom: 2px;";
+      box.createDiv({ text: String(count) }).style.cssText = "font-weight: bold;";
+    });
+
+    // Right Pane: 卷宗分析台账 (Scrolls Ledger)
+    const ledgerPanel = rightPane.createDiv({ cls: "aos-panel" });
+    ledgerPanel.createDiv({ cls: "aos-panel-title", text: "🗃️ 采集卷宗台账" });
+    ledgerPanel.createDiv({ cls: "aos-panel-note", text: "模糊匹配和查看收件箱的所有流转卷宗，点击直接翻阅" });
+
+    // Search header
+    const searchForm = ledgerPanel.createDiv();
+    searchForm.style.cssText = "display: flex; gap: 8px; margin-top: 10px; margin-bottom: 10px;";
+    const searchInput = searchForm.createEl("input", {
+      cls: "aos-search-input",
+      attr: { type: "text", value: this.analyticsSearchQuery, placeholder: "输入关键词过滤卷宗列表..." }
+    });
+    searchInput.style.cssText = "flex: 1; padding: 6px; font-size: 12px;";
+    searchInput.addEventListener("input", () => {
+      this.analyticsSearchQuery = searchInput.value;
+      this.ledgerDisplayLimit = 50;
+      this.renderCollection();
+    });
+
+    const resetBtn = searchForm.createEl("button", { cls: "aos-btn", text: "重置" });
+    resetBtn.addEventListener("click", () => {
+      this.analyticsSearchQuery = "";
+      this.ledgerDisplayLimit = 50;
+      searchInput.value = "";
+      this.renderCollection();
+    });
+
+    // Ledger table
+    const tableDiv = ledgerPanel.createDiv();
+    tableDiv.style.cssText = "max-height: 480px; overflow-y: auto; border: 1px solid var(--aos-border); border-radius: 6px; background: rgba(0,0,0,0.01);";
+
+    const tbl = tableDiv.createEl("table");
+    tbl.style.cssText = "width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;";
+
+    const thead = tbl.createEl("thead");
+    const headerRow = thead.createEl("tr");
+    headerRow.style.cssText = "background: rgba(0,0,0,0.03); border-bottom: 1px solid var(--aos-border); font-weight: bold;";
+    headerRow.createEl("th", { text: "卷宗题名" }).style.cssText = "padding: 6px;";
+    headerRow.createEl("th", { text: "来源" }).style.cssText = "padding: 6px; width: 60px;";
+    headerRow.createEl("th", { text: "建议分流" }).style.cssText = "padding: 6px; width: 110px;";
+    headerRow.createEl("th", { text: "审计" }).style.cssText = "padding: 6px; width: 90px;";
+
+    const tbody = tbl.createEl("tbody");
+
+    // Filter scrolls
+    const filterText = this.analyticsSearchQuery.toLowerCase().trim();
+    const filteredScrolls = snap.scrollsList.filter(s => {
+      if (!filterText) return true;
+      return s.title.toLowerCase().includes(filterText) ||
+             s.filePath.toLowerCase().includes(filterText) ||
+             s.platform.toLowerCase().includes(filterText) ||
+             s.category.toLowerCase().includes(filterText);
+    });
+
+    if (filteredScrolls.length === 0) {
+      const tr = tbody.createEl("tr");
+      const td = tr.createEl("td", { attr: { colspan: 4 }, text: "暂无符合条件的卷宗记载。" });
+      td.style.cssText = "padding: 12px; text-align: center; color: var(--aos-ink-muted);";
+    } else {
+      const visibleScrolls = filteredScrolls.slice(0, this.ledgerDisplayLimit);
+      visibleScrolls.forEach(item => {
+        const tr = tbody.createEl("tr");
+        tr.style.cssText = "border-bottom: 1px solid rgba(0,0,0,0.02); cursor: pointer; transition: background 0.1s ease;";
+        tr.addEventListener("mouseenter", () => { tr.style.background = "rgba(119,157,116,0.05)"; });
+        tr.addEventListener("mouseleave", () => { tr.style.background = "transparent"; });
+        tr.addEventListener("click", () => {
+          const file = this.app.vault.getAbstractFileByPath(item.filePath);
+          if (file instanceof TFile) {
+            void this.app.workspace.getLeaf(false).openFile(file);
+          } else {
+            new Notice(`无法找到该卷宗文件: ${item.filePath}`);
+          }
+        });
+
+        // Title
+        const tdTitle = tr.createEl("td");
+        tdTitle.style.cssText = "padding: 6px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;";
+        tdTitle.createSpan({ text: item.title });
+
+        // Platform
+        const tdPlat = tr.createEl("td");
+        tdPlat.style.cssText = "padding: 6px; color: var(--aos-ink-muted);";
+        tdPlat.setText(item.platform);
+
+        // Suggested Route
+        const tdRoute = tr.createEl("td");
+        tdRoute.style.cssText = "padding: 6px;";
+        tdRoute.setText(item.category);
+
+        // Evidence Badge
+        const tdEv = tr.createEl("td");
+        tdEv.style.cssText = "padding: 6px;";
+        const evBadge = tdEv.createSpan({ text: this.getEvidenceFriendlyName(item.evidence) });
+        evBadge.style.cssText = "font-size: 9px; padding: 1px 4px; border-radius: 3px;";
+
+        const ev = item.evidence;
+        if (ev === "subtitle_full") evBadge.style.cssText += "background: rgba(40, 88, 58, 0.12); color: #28583a;";
+        else if (ev === "subtitle_unstable") evBadge.style.cssText += "background: rgba(197, 139, 43, 0.12); color: #c58b2b;";
+        else if (ev === "subtitle_suspect") evBadge.style.cssText += "background: rgba(239, 68, 68, 0.12); color: #ef4444;";
+        else if (ev === "asr_failed") evBadge.style.cssText += "background: rgba(239, 68, 68, 0.15); color: #ef4444; font-weight: bold;";
+        else if (ev === "asr_pending") evBadge.style.cssText += "background: rgba(0,0,0,0.06); color: var(--aos-ink-muted);";
+        else evBadge.style.cssText += "background: rgba(3, 105, 161, 0.12); color: #0369a1;";
+      });
+
+      if (filteredScrolls.length > this.ledgerDisplayLimit) {
+        const moreRow = tbody.createEl("tr");
+        const moreTd = moreRow.createEl("td", { attr: { colspan: 4 } });
+        moreTd.style.cssText = "padding: 8px; text-align: center;";
+        const moreBtn = moreTd.createEl("button", { cls: "aos-btn", text: `显示更多 (还有 ${filteredScrolls.length - this.ledgerDisplayLimit} 条)...` });
+        moreBtn.style.cssText = "font-size: 10px; padding: 2px 8px; cursor: pointer;";
+        moreBtn.addEventListener("click", () => {
+          this.ledgerDisplayLimit += 100;
+          this.renderCollection();
+        });
+      }
+    }
+  }
+
+  private getEvidenceFriendlyName(ev: string): string {
+    if (ev === "subtitle_full") return "完整双轨";
+    if (ev === "subtitle_unstable") return "不稳字幕";
+    if (ev === "subtitle_suspect") return "低置信度";
+    if (ev === "toc_metadata") return "大纲目录";
+    if (ev === "asr_pending") return "ASR 处理中";
+    if (ev === "asr_failed") return "ASR 故障";
+    return ev;
   }
 
   private renderCollectionConfig(page: HTMLDivElement): void {
@@ -1444,20 +2137,20 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       const info = row.createDiv({ cls: "aos-config-info" });
       info.createDiv({ cls: "aos-config-name", text: name });
       info.createDiv({ cls: "aos-config-desc", text: desc });
-      
+
       let inputEl: HTMLInputElement;
       const value = env[key] || "";
-      
+
       if (isPassword && value) {
         const statusContainer = row.createDiv({ cls: "aos-config-pwd-status" });
         statusContainer.createSpan({ cls: "aos-pwd-configured-tag", text: "🔑 已配置" });
         const modifyBtn = statusContainer.createEl("button", { cls: "aos-pwd-modify-btn", text: "修改" });
-        
+
         inputEl = row.createEl("input", {
           cls: "aos-config-input is-hidden",
           attr: { type: "password", placeholder: "输入新密钥以覆盖" }
         });
-        
+
         modifyBtn.addEventListener("click", () => {
           statusContainer.style.display = "none";
           inputEl.classList.remove("is-hidden");
@@ -1469,11 +2162,11 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           attr: { type: isPassword ? "password" : "text", value }
         });
       }
-      
+
       inputEl.addEventListener("input", () => {
         overrides[key] = inputEl.value;
       });
-      
+
       return inputEl;
     };
 
@@ -1487,27 +2180,27 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       cls: "aos-config-save-btn",
       text: "💾 保存配置并重启 Daemon"
     });
-    
+
     saveBtn.addEventListener("click", async () => {
       saveBtn.disabled = true;
       saveBtn.textContent = "保存中...";
-      
+
       const updates: Record<string, string> = {
         X_WATCH_HANDLES: handles.value.trim(),
         HTTP_PROXY: proxy.value.trim(),
         HTTPS_PROXY: proxy.value.trim(),
         DOUYIN_BROWSER_WAIT_MS: browserWait.value.trim()
       };
-      
+
       // Override sensitive keys only if modified
       if (overrides["DEEPSEEK_API_KEY"] !== undefined) updates["DEEPSEEK_API_KEY"] = overrides["DEEPSEEK_API_KEY"].trim();
       if (overrides["GROQ_API_KEY"] !== undefined) updates["GROQ_API_KEY"] = overrides["GROQ_API_KEY"].trim();
-      
+
       const doSaveAndRestart = async () => {
         try {
           await this.saveEnvConfig(updates);
           new Notice("配置已成功写入 .env 文件！");
-          
+
           if (this.plugin.daemonOwnership === "managed") {
             const stopped = await this.plugin.stopDaemon();
             if (stopped) {
@@ -1522,7 +2215,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
             // offline, try start
             await this.plugin.startDaemon();
           }
-          
+
           this.collectionTab = "dashboard";
           this.renderCollection();
         } catch (e) {
@@ -1531,7 +2224,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           saveBtn.textContent = "💾 保存配置并重启 Daemon";
         }
       };
-      
+
       // Check active jobs count before stopping
       const snapshot = this.plugin.hamasxiangAdapter.getSnapshot();
       const activeJobs = snapshot.activeJobs || 0;
@@ -1541,12 +2234,12 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         const btns = confirmDiv.createDiv({ cls: "confirm-buttons" });
         const yesBtn = btns.createEl("button", { cls: "btn-confirm-yes", text: "强制重启" });
         const noBtn = btns.createEl("button", { cls: "btn-confirm-no", text: "取消" });
-        
+
         yesBtn.addEventListener("click", async () => {
           confirmDiv.remove();
           await doSaveAndRestart();
         });
-        
+
         noBtn.addEventListener("click", () => {
           confirmDiv.remove();
           saveBtn.disabled = false;
@@ -1554,7 +2247,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         });
         return;
       }
-      
+
       await doSaveAndRestart();
     });
   }
@@ -1877,7 +2570,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         if (viewType !== "graph") return;
         CompatAdapter.safeApplyGraphSearch(gv, searchQuery, scope === "current-tag");
       };
-      
+
       if (scope === "current-folder" && folderPath) {
         searchQuery = `path:"${normalizePath(folderPath)}"`;
       } else if (scope === "current-workspace") {
@@ -1943,7 +2636,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
               "search": searchQuery
             }
           };
-          
+
           if (viewType === "localgraph") {
             await CompatAdapter.safeSetGraphState(this.nativeGraphView, graphState);
             if (abortIfStale()) {
@@ -1957,7 +2650,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
             overlay.remove();
             return;
           }
-          
+
           // Fade out helper with timeout safety fallback
           overlay.style.opacity = "0";
           let removed = false;
@@ -2109,11 +2802,11 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     svg.setAttribute("class", "aos-graph-svg");
     parent.appendChild(svg);
     const positions = new Map<string, { x: number; y: number }>();
-    
+
     const width = 1000;
     const height = 590;
     const center = { x: width / 2, y: height / 2 };
-    
+
     const nodeStates = nodes.map(node => {
       const isSeed = node.path === seedPath;
       return {
@@ -2504,18 +3197,18 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     if (nextIndex >= 0 && nextIndex < this.globalHistoryStack.length) {
       this.globalHistoryIndex = nextIndex;
       const snapshot = this.globalHistoryStack[nextIndex];
-      
+
       this.isNavigatingHistory = true;
       this.contextTab = snapshot.contextTab;
-      
+
       if (snapshot.selectedWorkspaceId !== this.plugin.store.getSnapshot().selectedWorkspaceId) {
         this.selectWorkspace(snapshot.selectedWorkspaceId, false);
       }
-      
+
       if (snapshot.selectedFolderPath !== this.plugin.store.getSnapshot().selectedFolderPath) {
         this.selectFolder(snapshot.selectedFolderPath, false);
       }
-      
+
       if (snapshot.selectedFilePath) {
         const node = this.toNode(snapshot.selectedFilePath);
         if (node) {
@@ -2527,7 +3220,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         this.selectedNode = null;
         this.plugin.store.patch({ selectedFilePath: null });
       }
-      
+
       if (snapshot.activeModule !== this.plugin.store.getSnapshot().activeModule) {
         this.switchModule(snapshot.activeModule, false);
       } else {
@@ -2684,7 +3377,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       if (artifact.status === "failed" || artifact.status === "delivery_failed") dot.addClass("is-error");
       const primary = row.createDiv({ cls: "aos-task-primary" });
       primary.createDiv({ cls: "aos-task-title", text: artifact.title });
-      
+
       if (artifact.summary) {
         const summaryBlock = primary.createDiv({ cls: "aos-artifact-summary-block" });
         const cleanSummary = artifact.summary.trim();
@@ -2697,7 +3390,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           summaryBlock.setText(cleanSummary);
         }
       }
-      
+
       const timeStr = new Date(artifact.createdAt).toLocaleString("zh-CN", { hour12: false });
       const metaStr = artifact.kind === "capture" ? `任务完成 · ${timeStr}` : timeStr;
       primary.createDiv({ cls: "aos-task-detail", text: metaStr });
@@ -2722,15 +3415,15 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       const dot = row.createSpan({ cls: "aos-status-dot" });
       if (!item.relevant) dot.addClass("is-idle");
       else if (item.shouldNotify) dot.addClass("is-running");
-      
+
       const primary = row.createDiv({ cls: "aos-task-primary" });
       const titleRow = primary.createDiv({ cls: "aos-task-title-row" });
       titleRow.createSpan({ cls: "aos-task-title", text: item.title });
-      
+
       if (item.relevant) {
         titleRow.createSpan({ cls: "aos-core-badge", text: "★ 核心信号" });
       }
-      
+
       const detailContainer = primary.createDiv({ cls: "aos-task-detail-container" });
       const metadataParts = [
         item.author,
@@ -2738,16 +3431,16 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         item.confidence !== undefined ? `置信度 ${Math.round(item.confidence * 100)}%` : "",
         item.summary,
       ].filter(Boolean);
-      
+
       detailContainer.createSpan({ cls: "aos-task-detail", text: metadataParts.join(" · ") });
-      
+
       if (item.tags && item.tags.length > 0) {
         const tagContainer = detailContainer.createDiv({ cls: "aos-intel-tag-container" });
         item.tags.slice(0, 5).forEach(tag => {
           tagContainer.createSpan({ cls: "aos-intel-tag", text: `#${tag}` });
         });
       }
-      
+
       if (item.url) {
         const actions = row.createDiv({ cls: "aos-task-actions" });
         const button = actions.createEl("button", { cls: "aos-task-action-btn", text: "查看原文 ↗" });
@@ -2841,12 +3534,12 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const activity = this.plugin.indexService.getActivityByDay(56, workspace);
     const container = parent.createDiv({ cls: "aos-heatmap-container" });
     const grid = container.createDiv({ cls: "aos-heatmap" });
-    
+
     let totalEdits = 0;
     let maxEdits = 0;
     let streak = 0;
     let streakActive = true;
-    
+
     for (let offset = 55; offset >= 0; offset -= 1) {
       const date = new Date(Date.now() - offset * 86400000);
       const y = date.getFullYear();
@@ -2856,7 +3549,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       const count = activity.get(key) ?? 0;
       totalEdits += count;
       if (count > maxEdits) maxEdits = count;
-      
+
       const level = count === 0 ? 0 : count < 2 ? 1 : count < 5 ? 2 : count < 10 ? 3 : 4;
       const cell = grid.createDiv({ cls: `aos-heat-cell level-${level}` });
       cell.setAttribute("title", `${key} · ${count} 个节点修改`);
@@ -2879,15 +3572,15 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     }
 
     const stats = container.createDiv({ cls: "aos-heatmap-stats" });
-    
+
     const s1 = stats.createDiv({ cls: "aos-heatmap-stat" });
     s1.createDiv({ cls: "aos-heatmap-stat-val", text: `${totalEdits}` });
     s1.createDiv({ cls: "aos-heatmap-stat-lbl", text: "近 8 周总修改" });
-    
+
     const s2 = stats.createDiv({ cls: "aos-heatmap-stat" });
     s2.createDiv({ cls: "aos-heatmap-stat-val", text: `${streak}` });
     s2.createDiv({ cls: "aos-heatmap-stat-lbl", text: "当前连击天数" });
-    
+
     const s3 = stats.createDiv({ cls: "aos-heatmap-stat" });
     s3.createDiv({ cls: "aos-heatmap-stat-val", text: `${maxEdits}` });
     s3.createDiv({ cls: "aos-heatmap-stat-lbl", text: "单日最高修改" });
