@@ -14,6 +14,7 @@ export interface HamasxiangXWatchSnapshot {
   last_new_count?: number;
   last_success_at?: string;
   next_run_at?: string;
+  handles?: string;
 }
 
 export interface HamasxiangSnapshot {
@@ -168,18 +169,24 @@ export class HamasxiangAdapter {
     return this.refreshing;
   }
 
-  async runXWatch(): Promise<void> {
+  async runXWatch(handles?: string): Promise<void> {
     if (!this.authToken) {
       throw new Error("请先在天工台设置中配置蛤蟆祥 Daemon Token");
     }
+    const bodyObj: Record<string, string> = {};
+    if (handles) bodyObj.handles = handles;
     const response = await this.fetchWithTimeout(`${this.baseUrl}/x-watch/run`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.authToken}`,
+      },
+      body: JSON.stringify(bodyObj),
     }, 12000);
     const data = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok) throw new Error(String(data.error ?? data.status ?? `HTTP ${response.status}`));
-    this.logBus.append("success", "hamaxiang.x-watch", "已通过本地 Daemon 唤醒 X Watch");
+    const msg = handles ? `已通过本地 Daemon 唤醒针对 ${handles} 的单源巡逻测试` : "已通过本地 Daemon 唤醒 X Watch";
+    this.logBus.append("success", "hamaxiang.x-watch", msg);
     await this.refresh(false);
   }
 

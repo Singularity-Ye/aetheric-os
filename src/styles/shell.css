@@ -1795,3 +1795,27 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   background: var(--aos-surface);
   color: var(--aos-ink);
 }
+
+/* Single handle test button inside tags */
+.aos-x-handle-tag .test-btn {
+  margin-left: 6px;
+  cursor: pointer;
+  color: var(--aos-ink-muted);
+  font-size: 10px;
+  display: inline-block;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.aos-x-handle-tag .test-btn:hover {
+  color: #2e7d32;
+  transform: scale(1.2);
+}
+.aos-x-handle-tag .test-btn.is-running {
+  animation: aos-spin 1s linear infinite;
+  pointer-events: none;
+  color: #2e7d32;
+}
+
+@keyframes aos-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

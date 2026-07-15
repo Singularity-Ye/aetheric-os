@@ -1159,6 +1159,10 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       });
     });
 
+    if (!this.envLoading && Object.keys(this.envConfig).length === 0) {
+      void this.loadEnvConfig().then(() => this.renderCollection());
+    }
+
     if (this.collectionTab === "dashboard") {
       this.renderCollectionDashboard(page, snapshot);
     } else if (this.collectionTab === "sources") {
@@ -1192,6 +1196,17 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const badge = hero.createSpan({ cls: `aos-service-badge ${snapshot.online ? "is-online" : "is-offline"}` });
     badge.createSpan({ cls: "aos-badge-dot" });
     badge.createSpan({ text: snapshot.online ? "本地 Daemon 在线" : "本地 Daemon 离线" });
+
+    // Configuration drift detection warning banner
+    const diskHandles = this.normalizeHandlesStr(this.envConfig["X_WATCH_HANDLES"]);
+    const memHandles = this.normalizeHandlesStr(snapshot.xWatch?.handles);
+    if (snapshot.online && diskHandles !== memHandles) {
+      const alertDiv = page.createDiv({ cls: "aos-confirm-block aos-drift-warning" });
+      alertDiv.createDiv({
+        cls: "confirm-message",
+        text: `⚠️ 配置漂移提示：天工台上的 X 巡逻账号配置已更改。当前内存中已运行的为 [${memHandles || "无"}]，磁盘最新配置为 [${diskHandles || "无"}]。保存配置并重启托管 Daemon 生效。`
+      });
+    }
 
     const controlRow = page.createDiv({ cls: "aos-action-row aos-daemon-controls" });
     this.actionButton(controlRow, "刷新炉火", () => void this.plugin.hamasxiangAdapter.refresh(true));
@@ -1313,6 +1328,18 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     xPanel.createDiv({ cls: "aos-panel-title", text: "📡 Twitter/X 情报数据源" });
     xPanel.createDiv({ cls: "aos-panel-note", text: "配置要巡逻的 X 账号句柄列表（从 Daemon .env 读取）" });
     
+    // Add config drift alert warning
+    const diskHandles = this.normalizeHandlesStr(env["X_WATCH_HANDLES"]);
+    const memHandles = this.normalizeHandlesStr(snapshot.xWatch?.handles);
+    if (snapshot.online && diskHandles !== memHandles) {
+      const alertDiv = xPanel.createDiv({ cls: "aos-confirm-block aos-drift-warning" });
+      alertDiv.style.cssText = "margin: 10px 0 15px 0; padding: 10px;";
+      alertDiv.createDiv({
+        cls: "confirm-message",
+        text: `⚠️ 当前修改尚未生效。已加载运行：[${memHandles || "无"}]。保存后重启托管 Daemon 即可生效。`
+      });
+    }
+    
     const handlesStr = env["X_WATCH_HANDLES"] || "";
     const handles = handlesStr.split(",").map(h => h.trim()).filter(Boolean);
     const tagsContainer = xPanel.createDiv({ cls: "aos-x-handles-tags" });
@@ -1323,6 +1350,24 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       handles.forEach(handle => {
         const tag = tagsContainer.createDiv({ cls: "aos-x-handle-tag" });
         tag.createSpan({ text: `@${handle}` });
+        
+        // Single handle test button
+        const testBtn = tag.createSpan({ cls: "test-btn", text: "▶" });
+        testBtn.setAttribute("title", `测试单源抓取 @${handle}`);
+        testBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          testBtn.classList.add("is-running");
+          new Notice(`📡 开始单源测试巡逻：@${handle}...`);
+          try {
+            await this.plugin.hamasxiangAdapter.runXWatch(handle);
+            new Notice(`✅ @${handle} 单源测试巡逻已成功入队！`);
+          } catch (err) {
+            new Notice(`❌ 测试失败: ${err instanceof Error ? err.message : String(err)}`);
+          } finally {
+            testBtn.classList.remove("is-running");
+          }
+        });
+
         const removeBtn = tag.createSpan({ cls: "remove-btn", text: "×" });
         removeBtn.addEventListener("click", async () => {
           const updated = handles.filter(h => h !== handle).join(",");
@@ -3220,6 +3265,15 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         await this.addInspiration(text);
       }
     });
+  }
+
+  private normalizeHandlesStr(str: string | undefined): string {
+    return (str || "")
+      .split(",")
+      .map(h => h.trim().toLowerCase())
+      .filter(Boolean)
+      .sort()
+      .join(",");
   }
 }
 
