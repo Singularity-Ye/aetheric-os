@@ -1204,7 +1204,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       const alertDiv = page.createDiv({ cls: "aos-confirm-block aos-drift-warning" });
       alertDiv.createDiv({
         cls: "confirm-message",
-        text: `⚠️ 配置漂移提示：天工台上的 X 巡逻账号配置已更改。当前内存中已运行的为 [${memHandles || "无"}]，磁盘最新配置为 [${diskHandles || "无"}]。保存配置并重启托管 Daemon 生效。`
+        text: this.getDriftWarningText(diskHandles, memHandles, snapshot.activeJobs, owner)
       });
     }
 
@@ -1336,7 +1336,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       alertDiv.style.cssText = "margin: 10px 0 15px 0; padding: 10px;";
       alertDiv.createDiv({
         cls: "confirm-message",
-        text: `⚠️ 当前修改尚未生效。已加载运行：[${memHandles || "无"}]。保存后重启托管 Daemon 即可生效。`
+        text: this.getDriftWarningText(diskHandles, memHandles, snapshot.activeJobs, this.plugin.daemonOwnership)
       });
     }
     
@@ -1418,7 +1418,21 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const env = this.envConfig;
     const configPanel = page.createDiv({ cls: "aos-panel aos-daemon-config-panel" });
     configPanel.createDiv({ cls: "aos-panel-title", text: "⚙️ 蛤蟆祥 Daemon 环境配置编辑器" });
-    configPanel.createDiv({ cls: "aos-panel-note", text: "直接读取并安全回写 hamaxiang-system/.env 配置文件；保存后天工台将自动重启 Daemon 生效。" });
+
+    const owner = this.plugin.daemonOwnership;
+    let restartNote = "";
+    if (owner === "managed") {
+      restartNote = "保存后天工台将自动重启 Daemon 生效。";
+    } else if (owner === "external") {
+      restartNote = "配置已保存；当前 Daemon 由外部进程管理，请到原启动位置手动重启。";
+    } else {
+      restartNote = "保存配置并在下次启动时生效。";
+    }
+
+    configPanel.createDiv({
+      cls: "aos-panel-note",
+      text: `直接读取并安全回写 hamaxiang-system/.env 配置文件；${restartNote}`
+    });
 
     const form = configPanel.createDiv({ cls: "aos-config-form" });
 
@@ -3274,6 +3288,18 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       .filter(Boolean)
       .sort()
       .join(",");
+  }
+
+  private getDriftWarningText(diskHandles: string, memHandles: string, activeJobs: number, owner: string): string {
+    const base = `配置漂移提示：天工台上的 X 巡逻账号配置已更改。当前内存中已运行的为 [${memHandles || "无"}]，磁盘最新配置为 [${diskHandles || "无"}]。`;
+    if (activeJobs > 0) {
+      return `⚠️ ${base}配置已保存；当前有活跃任务运行中，请等待任务结束后再重启。`;
+    } else if (owner === "managed") {
+      return `⚠️ ${base}配置已保存；可由天工台安全重启。`;
+    } else if (owner === "external") {
+      return `⚠️ ${base}配置已保存；当前 Daemon 由外部进程管理，请到原启动位置手动重启。`;
+    }
+    return `⚠️ ${base}保存配置并重启 Daemon 生效。`;
   }
 }
 
