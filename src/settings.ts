@@ -17,6 +17,9 @@ export interface ScriptoriumSettings {
   workspaces: AethericWorkspace[];
   shellState: AethericShellState;
   weatherCache?: { data: any; timestamp: number };
+  hamasxiangSystemPath: string;
+  daemonMode: "managed" | "external";
+  stopDaemonOnUnload: boolean;
 }
 
 export const DEFAULT_SETTINGS: ScriptoriumSettings = {
@@ -29,6 +32,9 @@ export const DEFAULT_SETTINGS: ScriptoriumSettings = {
   workspaces: DEFAULT_WORKSPACES,
   shellState: DEFAULT_SHELL_STATE,
   weatherCache: undefined,
+  hamasxiangSystemPath: "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system",
+  daemonMode: "managed",
+  stopDaemonOnUnload: false,
 };
 
 export function mergeSettings(raw: Partial<ScriptoriumSettings> | null | undefined): ScriptoriumSettings {
@@ -127,6 +133,39 @@ export class ScriptoriumSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.todoFilePath)
         .onChange(async value => {
           this.plugin.settings.todoFilePath = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("蛤蟆祥 System 路径")
+      .setDesc("本地 hamaxiang-system 文件夹的绝对路径，用于加载和管理 .env 配置文件。")
+      .addText(text => text
+        .setPlaceholder("D:\\...\\hamaxiang-system")
+        .setValue(this.plugin.settings.hamasxiangSystemPath)
+        .onChange(async value => {
+          this.plugin.settings.hamasxiangSystemPath = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("蛤蟆祥 Daemon 启动模式")
+      .setDesc("托管模式下由天工台自动守护拉起，外部常驻模式下仅连网检测状态。")
+      .addDropdown(dropdown => dropdown
+        .addOption("managed", "天工台托管")
+        .addOption("external", "外部常驻")
+        .setValue(this.plugin.settings.daemonMode)
+        .onChange(async value => {
+          this.plugin.settings.daemonMode = value as "managed" | "external";
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("卸载插件时终止托管守护")
+      .setDesc("天工台卸载/重载时是否自动杀掉 Python 进程，默认关闭防止截断后台采集。")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.stopDaemonOnUnload)
+        .onChange(async value => {
+          this.plugin.settings.stopDaemonOnUnload = value;
           await this.plugin.saveSettings();
         }));
 

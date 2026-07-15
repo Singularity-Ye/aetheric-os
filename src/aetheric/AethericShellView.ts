@@ -59,6 +59,9 @@ export class AethericShellView extends ItemView {
   private unsubscribeHamasxiang: (() => void) | null = null;
   private contextTab: ContextTab = "overview";
   private collectionTab = "dashboard";
+  private envConfig: Record<string, string> = {};
+  private envLastModified = 0;
+  private envLoading = false;
   private selectedNode: KnowledgeNodeViewModel | null = null;
   private commandResults!: HTMLDivElement;
   private commandMatches: KnowledgeNodeViewModel[] = [];
@@ -477,6 +480,11 @@ export class AethericShellView extends ItemView {
     this.virtualList = null;
     this.mainPane.empty();
     const module = this.plugin.store.getSnapshot().activeModule;
+    
+    const nonNoteModules = ["collection", "tasks", "intelligence", "logs"];
+    const shouldHideContext = nonNoteModules.includes(module);
+    this.root.classList.toggle("aos-hide-context-pane", shouldHideContext);
+
     if (module === "overview") this.renderOverview();
     else if (module === "navigation") this.renderNavigation();
     else if (module === "collection") this.renderCollection();
@@ -1008,11 +1016,20 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     }
   }
 
-  private readEnvConfig(): Record<string, string> {
-    const envPath = "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system\\.env";
+  private async loadEnvConfig(): Promise<void> {
+    const systemPath = this.plugin.settings.hamasxiangSystemPath;
+    const envPath = path.join(systemPath, ".env");
+    this.envLoading = true;
     try {
-      if (!fs.existsSync(envPath)) return {};
-      const content = fs.readFileSync(envPath, "utf-8");
+      if (!fs.existsSync(envPath)) {
+        this.envConfig = {};
+        this.envLastModified = 0;
+        return;
+      }
+      const stat = await fs.promises.stat(envPath);
+      this.envLastModified = stat.mtimeMs;
+      
+      const content = await fs.promises.readFile(envPath, "utf-8");
       const config: Record<string, string> = {};
       const lines = content.split(/\r?\n/);
       for (const line of lines) {
@@ -1025,22 +1042,46 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           config[key] = val;
         }
       }
-      return config;
+      this.envConfig = config;
     } catch (e) {
       console.error("Failed to read env config", e);
-      return {};
+      this.envConfig = {};
+    } finally {
+      this.envLoading = false;
     }
   }
 
-  private writeEnvConfig(updates: Record<string, string>): void {
-    const envPath = "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system\\.env";
+  private async saveEnvConfig(updates: Record<string, string>): Promise<void> {
+    const systemPath = this.plugin.settings.hamasxiangSystemPath;
+    const envPath = path.join(systemPath, ".env");
+    const timestamp = Date.now();
+    const pid = process.pid;
+    const tempPath = path.join(systemPath, `.env.tmp-${pid}-${timestamp}`);
+    
     try {
+      if (fs.existsSync(envPath)) {
+        const stat = await fs.promises.stat(envPath);
+        if (stat.mtimeMs > this.envLastModified) {
+          throw new Error("检测到配置文件冲突：该文件已被外部修改，为了防止覆盖，已中止本次保存。请刷新页面后重试！");
+        }
+      }
+      
       let content = "";
       if (fs.existsSync(envPath)) {
-        content = fs.readFileSync(envPath, "utf-8");
+        content = await fs.promises.readFile(envPath, "utf-8");
       }
       const lines = content.split(/\r?\n/);
-      const keysToUpdate = new Set(Object.keys(updates));
+      
+      const whitelist = new Set([
+        "X_WATCH_HANDLES",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "DOUYIN_BROWSER_WAIT_MS",
+        "DEEPSEEK_API_KEY",
+        "GROQ_API_KEY"
+      ]);
+      
+      const keysToUpdate = new Set(Object.keys(updates).filter(k => whitelist.has(k)));
       
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -1050,6 +1091,10 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           if (index > 0) {
             const key = trimmed.substring(0, index).trim();
             if (keysToUpdate.has(key)) {
+              if ((key === "DEEPSEEK_API_KEY" || key === "GROQ_API_KEY") && !updates[key]) {
+                keysToUpdate.delete(key);
+                continue;
+              }
               lines[i] = `${key}=${updates[key]}`;
               keysToUpdate.delete(key);
             }
@@ -1058,12 +1103,27 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
       
       for (const key of keysToUpdate) {
+        if ((key === "DEEPSEEK_API_KEY" || key === "GROQ_API_KEY") && !updates[key]) {
+          continue;
+        }
         lines.push(`${key}=${updates[key]}`);
       }
       
-      fs.writeFileSync(envPath, lines.join("\n"), "utf-8");
+      await fs.promises.writeFile(tempPath, lines.join("\n"), "utf-8");
+      await fs.promises.rename(tempPath, envPath);
+      
+      const newStat = await fs.promises.stat(envPath);
+      this.envLastModified = newStat.mtimeMs;
+      
+      for (const key of Object.keys(updates)) {
+        if (updates[key] || !(key === "DEEPSEEK_API_KEY" || key === "GROQ_API_KEY")) {
+          this.envConfig[key] = updates[key];
+        }
+      }
     } catch (e) {
-      console.error("Failed to write env config", e);
+      if (fs.existsSync(tempPath)) {
+        await fs.promises.unlink(tempPath).catch(() => {});
+      }
       throw e;
     }
   }
@@ -1076,7 +1136,6 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     heading.createDiv({ cls: "aos-page-title", text: "采集 · 蛤蟆祥系统" });
     heading.createDiv({ cls: "aos-page-subtitle", text: "通过本地 Daemon 公共端点接入，不复制爬虫后端" });
 
-    // Render Tab Selector
     const tabRow = page.createDiv({ cls: "aos-collection-tab-row" });
     const tabs = [
       { id: "dashboard", label: "📊 运行看板" },
@@ -1089,8 +1148,11 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         cls: `aos-collection-tab-btn ${this.collectionTab === tab.id ? "is-active" : ""}`,
         text: tab.label
       });
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         this.collectionTab = tab.id;
+        if (tab.id === "config" || tab.id === "sources") {
+          await this.loadEnvConfig();
+        }
         this.renderCollection();
       });
     });
@@ -1098,9 +1160,17 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     if (this.collectionTab === "dashboard") {
       this.renderCollectionDashboard(page, snapshot);
     } else if (this.collectionTab === "sources") {
-      this.renderCollectionSources(page, snapshot);
+      if (this.envLoading) {
+        page.createDiv({ cls: "aos-spinner-small" });
+      } else {
+        this.renderCollectionSources(page, snapshot);
+      }
     } else {
-      this.renderCollectionConfig(page);
+      if (this.envLoading) {
+        page.createDiv({ cls: "aos-spinner-small" });
+      } else {
+        this.renderCollectionConfig(page);
+      }
     }
   }
 
@@ -1110,8 +1180,11 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const intro = hero.createDiv();
     intro.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥 · 本地 Daemon 托管面板" });
     
-    const isManaged = this.plugin.daemonProcess !== null;
-    const daemonDetailText = isManaged ? "天工台单实例进程守护中" : "未开启托管 / 外部独立运行";
+    const owner = this.plugin.daemonOwnership;
+    let daemonDetailText = "服务离线";
+    if (owner === "managed") daemonDetailText = "天工台单实例进程守护中";
+    else if (owner === "external") daemonDetailText = "复用外部活动进程运行中";
+    
     intro.createDiv({ cls: "aos-panel-note", text: `Daemon 状态: ${daemonDetailText}` });
     
     const badge = hero.createSpan({ cls: `aos-service-badge ${snapshot.online ? "is-online" : "is-offline"}` });
@@ -1124,47 +1197,27 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     
     if (!snapshot.online) {
       this.actionButton(controlRow, "🚀 启动 Daemon", () => void this.plugin.startDaemon());
-    } else if (isManaged) {
+    } else if (owner === "managed") {
       this.actionButton(controlRow, "🛑 停止 Daemon", () => void this.plugin.stopDaemon());
     }
 
     const metrics = page.createDiv({ cls: "aos-metric-grid aos-adapter-metrics" });
-    this.metric(metrics, "端口/端点", snapshot.online ? "127.0.0.1:8765" : "未连接", snapshot.service);
+    this.metric(metrics, "端口", snapshot.online ? "8765" : "未连接", snapshot.online ? "127.0.0.1 · hamaxiang-daemon" : "服务离线");
     this.metric(metrics, "服务版本", snapshot.version ? `v${snapshot.version}` : "--", "GET /health");
     this.metric(metrics, "活跃任务数", `${snapshot.activeJobs}`, "排队或抓取中");
     this.metric(metrics, "X Watch 状态", this.xWatchLabel(snapshot.xWatch), "定时任务循环");
     this.metric(metrics, "下次巡逻时间", this.formatNextRun(snapshot.xWatch.next_run_at), "X Watch");
 
     const grid = page.createDiv({ cls: "aos-collection-grid" });
-    
     const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
-    const logPanel = leftPane.createDiv({ cls: "aos-panel aos-daemon-logs-panel" });
-    logPanel.createDiv({ cls: "aos-panel-title", text: "🐸 Daemon 实时运行日志" });
-    logPanel.createDiv({ cls: "aos-panel-note", text: "数据来自本地 logBus 监听器，过滤自 hamaxiang.daemon 通道" });
     
-    const logsContainer = logPanel.createDiv({ cls: "aos-daemon-logs-console" });
-    const allLogs = this.plugin.logBus.getEntries();
-    const daemonLogs = allLogs.filter(entry => entry.source.startsWith("hamaxiang") || entry.source.startsWith("hamasxiang"));
-    
-    if (daemonLogs.length === 0) {
-      logsContainer.createDiv({ cls: "aos-empty-logs", text: "暂无 Daemon 日志，等待后台触发或启动服务。" });
-    } else {
-      for (const log of daemonLogs.slice(-100)) {
-        const line = logsContainer.createDiv({ cls: `aos-console-line is-${log.level}` });
-        const time = new Date(log.timestamp).toLocaleTimeString("zh-CN", { hour12: false });
-        line.createSpan({ cls: "console-time", text: `[${time}] ` });
-        line.createSpan({ cls: "console-msg", text: log.message });
-      }
-      window.setTimeout(() => {
-        logsContainer.scrollTop = logsContainer.scrollHeight;
-      }, 50);
-    }
-
-    const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
-    const taskPanel = rightPane.createDiv({ cls: "aos-panel" });
+    // Top-row: Left card Tasks
+    const taskPanel = leftPane.createDiv({ cls: "aos-panel" });
     taskPanel.createDiv({ cls: "aos-panel-title", text: "采集任务快照" });
     this.renderTaskList(taskPanel, this.plugin.hamasxiangAdapter.getTasks(), false);
-    
+
+    // Top-row: Right card Enqueue Form
+    const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
     const enqueuePanel = rightPane.createDiv({ cls: "aos-panel" });
     enqueuePanel.createDiv({ cls: "aos-panel-title", text: "🎙️ 手动发起抖音抓取" });
     enqueuePanel.createDiv({ cls: "aos-panel-note", text: "直接输入抖音分享链接（含 ASR 提取与 AI 摘要）" });
@@ -1196,6 +1249,35 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         submitBtn.textContent = "加入采集队列";
       }
     });
+
+    // Bottom-row: Daemon Event Stream
+    const logPanel = page.createDiv({ cls: "aos-panel aos-daemon-logs-panel" });
+    const logHeader = logPanel.createDiv({ cls: "aos-panel-header-row" });
+    logHeader.createDiv({ cls: "aos-panel-title", text: "🐸 Daemon 实时事件流" });
+    const expandLogBtn = logHeader.createEl("button", { cls: "aos-logs-expand-btn", text: "展开完整日志坞" });
+    expandLogBtn.addEventListener("click", () => {
+      const state = this.plugin.store.getSnapshot();
+      this.plugin.store.patch({ logDock: { ...state.logDock, open: true } });
+    });
+
+    const logsContainer = logPanel.createDiv({ cls: "aos-daemon-logs-console" });
+    const allLogs = this.plugin.logBus.getEntries();
+    const daemonLogs = allLogs.filter(entry => entry.source.startsWith("hamaxiang") || entry.source.startsWith("hamasxiang"));
+    
+    if (daemonLogs.length === 0) {
+      logsContainer.createDiv({ cls: "aos-empty-logs", text: "暂无 Daemon 事件日志，等待后台触发或启动服务。" });
+    } else {
+      // Only show top 5 latest event streams
+      for (const log of daemonLogs.slice(-5)) {
+        const line = logsContainer.createDiv({ cls: `aos-console-line is-${log.level}` });
+        const time = new Date(log.timestamp).toLocaleTimeString("zh-CN", { hour12: false });
+        line.createSpan({ cls: "console-time", text: `[${time}] ` });
+        line.createSpan({ cls: "console-msg", text: log.message });
+      }
+      window.setTimeout(() => {
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+      }, 50);
+    }
   }
 
   private async enqueueDouyinJob(url: string): Promise<void> {
@@ -1221,9 +1303,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
   }
 
   private renderCollectionSources(page: HTMLDivElement, snapshot: any): void {
-    const env = this.readEnvConfig();
+    const env = this.envConfig;
     const grid = page.createDiv({ cls: "aos-collection-grid" });
-    
     const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
     
     const xPanel = leftPane.createDiv({ cls: "aos-panel" });
@@ -1241,10 +1322,10 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         const tag = tagsContainer.createDiv({ cls: "aos-x-handle-tag" });
         tag.createSpan({ text: `@${handle}` });
         const removeBtn = tag.createSpan({ cls: "remove-btn", text: "×" });
-        removeBtn.addEventListener("click", () => {
+        removeBtn.addEventListener("click", async () => {
           const updated = handles.filter(h => h !== handle).join(",");
           env["X_WATCH_HANDLES"] = updated;
-          this.writeEnvConfig(env);
+          await this.saveEnvConfig(env);
           new Notice(`已移除账号 @${handle}，保存配置成功！`);
           this.renderCollection();
         });
@@ -1257,7 +1338,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       attr: { placeholder: "新增巡逻账号句柄 (如 thsottiaux)" }
     });
     const addBtn = addForm.createEl("button", { cls: "aos-add-handle-btn", text: "➕ 添加" });
-    addBtn.addEventListener("click", () => {
+    addBtn.addEventListener("click", async () => {
       const handle = addInput.value.trim().replace(/^@/, "");
       if (!handle) return;
       if (handles.includes(handle)) {
@@ -1266,7 +1347,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
       handles.push(handle);
       env["X_WATCH_HANDLES"] = handles.join(",");
-      this.writeEnvConfig(env);
+      await this.saveEnvConfig(env);
       addInput.value = "";
       new Notice(`已成功添加巡逻账号 @${handle}！`);
       this.renderCollection();
@@ -1277,7 +1358,6 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     this.renderArtifactList(artPanel, this.plugin.hamasxiangAdapter.getArtifacts().slice(0, 10));
 
     const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
-    
     const guideCard = rightPane.createDiv({ cls: "aos-panel" });
     guideCard.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥数据捕获说明" });
     
@@ -1288,12 +1368,15 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
   }
 
   private renderCollectionConfig(page: HTMLDivElement): void {
-    const env = this.readEnvConfig();
+    const env = this.envConfig;
     const configPanel = page.createDiv({ cls: "aos-panel aos-daemon-config-panel" });
     configPanel.createDiv({ cls: "aos-panel-title", text: "⚙️ 蛤蟆祥 Daemon 环境配置编辑器" });
     configPanel.createDiv({ cls: "aos-panel-note", text: "直接读取并安全回写 hamaxiang-system/.env 配置文件；保存后天工台将自动重启 Daemon 生效。" });
 
     const form = configPanel.createDiv({ cls: "aos-config-form" });
+
+    // Tracks override status
+    const overrides: Record<string, string> = {};
 
     const addConfigField = (key: string, name: string, desc: string, isPassword = false) => {
       const row = form.createDiv({ cls: "aos-config-row" });
@@ -1301,15 +1384,40 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       info.createDiv({ cls: "aos-config-name", text: name });
       info.createDiv({ cls: "aos-config-desc", text: desc });
       
-      const input = row.createEl("input", {
-        cls: "aos-config-input",
-        attr: { type: isPassword ? "password" : "text", value: env[key] || "" }
+      let inputEl: HTMLInputElement;
+      const value = env[key] || "";
+      
+      if (isPassword && value) {
+        const statusContainer = row.createDiv({ cls: "aos-config-pwd-status" });
+        statusContainer.createSpan({ cls: "aos-pwd-configured-tag", text: "🔑 已配置" });
+        const modifyBtn = statusContainer.createEl("button", { cls: "aos-pwd-modify-btn", text: "修改" });
+        
+        inputEl = row.createEl("input", {
+          cls: "aos-config-input is-hidden",
+          attr: { type: "password", placeholder: "输入新密钥以覆盖" }
+        });
+        
+        modifyBtn.addEventListener("click", () => {
+          statusContainer.style.display = "none";
+          inputEl.classList.remove("is-hidden");
+          inputEl.focus();
+        });
+      } else {
+        inputEl = row.createEl("input", {
+          cls: "aos-config-input",
+          attr: { type: isPassword ? "password" : "text", value }
+        });
+      }
+      
+      inputEl.addEventListener("input", () => {
+        overrides[key] = inputEl.value;
       });
-      return input;
+      
+      return inputEl;
     };
 
-    const dsKey = addConfigField("DEEPSEEK_API_KEY", "DeepSeek API 密钥", "本地大语言模型智能分析与提炼卡片摘要所用接口 Key", true);
-    const groqKey = addConfigField("GROQ_API_KEY", "Groq API 密钥", "用于快速进行 Douyin 音频 ASR 转换的本地端点凭证", true);
+    addConfigField("DEEPSEEK_API_KEY", "DeepSeek API 密钥", "本地大语言模型智能分析与提炼卡片摘要所用接口 Key", true);
+    addConfigField("GROQ_API_KEY", "Groq API 密钥", "用于快速进行 Douyin 音频 ASR 转换的本地端点凭证", true);
     const handles = addConfigField("X_WATCH_HANDLES", "X Watch 巡逻账号", "Twitter 定时侦查目标（半角逗号分隔）");
     const proxy = addConfigField("HTTP_PROXY", "本地 HTTP 代理", "解决国内网络连接 Worker 超时问题（例如 http://127.0.0.1:7897）");
     const browserWait = addConfigField("DOUYIN_BROWSER_WAIT_MS", "抖音浏览器抓取等待时间 (ms)", "Playwright 模拟浏览页面加载的延迟阈值");
@@ -1323,29 +1431,70 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       saveBtn.disabled = true;
       saveBtn.textContent = "保存中...";
       
-      env["DEEPSEEK_API_KEY"] = dsKey.value.trim();
-      env["GROQ_API_KEY"] = groqKey.value.trim();
-      env["X_WATCH_HANDLES"] = handles.value.trim();
-      env["HTTP_PROXY"] = proxy.value.trim();
-      env["HTTPS_PROXY"] = proxy.value.trim();
-      env["DOUYIN_BROWSER_WAIT_MS"] = browserWait.value.trim();
+      const updates: Record<string, string> = {
+        X_WATCH_HANDLES: handles.value.trim(),
+        HTTP_PROXY: proxy.value.trim(),
+        HTTPS_PROXY: proxy.value.trim(),
+        DOUYIN_BROWSER_WAIT_MS: browserWait.value.trim()
+      };
       
-      try {
-        this.writeEnvConfig(env);
-        new Notice("配置已成功写入 .env 文件！");
+      // Override sensitive keys only if modified
+      if (overrides["DEEPSEEK_API_KEY"] !== undefined) updates["DEEPSEEK_API_KEY"] = overrides["DEEPSEEK_API_KEY"].trim();
+      if (overrides["GROQ_API_KEY"] !== undefined) updates["GROQ_API_KEY"] = overrides["GROQ_API_KEY"].trim();
+      
+      const doSaveAndRestart = async () => {
+        try {
+          await this.saveEnvConfig(updates);
+          new Notice("配置已成功写入 .env 文件！");
+          
+          if (this.plugin.daemonOwnership === "managed") {
+            const stopped = await this.plugin.stopDaemon();
+            if (stopped) {
+              await this.plugin.startDaemon();
+              new Notice("蛤蟆祥 Daemon 进程已成功重新拉起生效！");
+            } else {
+              new Notice("配置已保存；但 Daemon 停止失败，请手动重启进程。");
+            }
+          } else if (this.plugin.daemonOwnership === "external") {
+            new Notice("配置已保存；当前 Daemon 由外部进程管理，请在原启动位置重启。");
+          } else {
+            // offline, try start
+            await this.plugin.startDaemon();
+          }
+          
+          this.collectionTab = "dashboard";
+          this.renderCollection();
+        } catch (e) {
+          new Notice(`保存失败: ${e instanceof Error ? e.message : String(e)}`);
+          saveBtn.disabled = false;
+          saveBtn.textContent = "💾 保存配置并重启 Daemon";
+        }
+      };
+      
+      // Check active jobs count before stopping
+      const snapshot = this.plugin.hamasxiangAdapter.getSnapshot();
+      const activeJobs = snapshot.activeJobs || 0;
+      if (activeJobs > 0 && this.plugin.daemonOwnership === "managed") {
+        const confirmDiv = configPanel.createDiv({ cls: "aos-confirm-block" });
+        confirmDiv.createDiv({ cls: "confirm-message", text: `⚠️ 当前有 ${activeJobs} 个任务运行中。强制重启会截断正在进行的 ASR 或巡逻任务，是否继续强制重启？` });
+        const btns = confirmDiv.createDiv({ cls: "confirm-buttons" });
+        const yesBtn = btns.createEl("button", { cls: "btn-confirm-yes", text: "强制重启" });
+        const noBtn = btns.createEl("button", { cls: "btn-confirm-no", text: "取消" });
         
-        this.plugin.stopDaemon();
-        await this.plugin.startDaemon();
-        new Notice("蛤蟆祥 Daemon 进程已重置启动！");
+        yesBtn.addEventListener("click", async () => {
+          confirmDiv.remove();
+          await doSaveAndRestart();
+        });
         
-        this.collectionTab = "dashboard";
-        this.renderCollection();
-      } catch (e) {
-        new Notice(`保存失败: ${e}`);
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = "💾 保存配置并重启 Daemon";
+        noBtn.addEventListener("click", () => {
+          confirmDiv.remove();
+          saveBtn.disabled = false;
+          saveBtn.textContent = "💾 保存配置并重启 Daemon";
+        });
+        return;
       }
+      
+      await doSaveAndRestart();
     });
   }
 

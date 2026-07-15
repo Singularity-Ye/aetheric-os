@@ -1551,3 +1551,114 @@ button.aos-chat-send-btn:active {
 .aos-daemon-controls {
   margin-bottom: 15px;
 }
+
+/* Context Pane Grid Collapse */
+body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-work-area {
+  grid-template-columns: 64px var(--aos-navigator-width, 250px) minmax(0, 1fr) 0px !important;
+}
+body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane {
+  display: none !important;
+}
+
+/* Event stream header and expand buttons */
+.aos-panel-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.aos-logs-expand-btn {
+  background: var(--aos-surface-muted);
+  border: 1px solid var(--aos-border);
+  color: var(--aos-ink-muted);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.aos-logs-expand-btn:hover {
+  background: var(--aos-surface);
+  color: var(--aos-ink);
+  border-color: var(--aos-border-strong);
+}
+
+/* Password configured status badge and modify button */
+.aos-config-pwd-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 240px;
+  justify-content: flex-end;
+}
+.aos-pwd-configured-tag {
+  background: rgba(46, 125, 50, 0.1);
+  color: #2e7d32;
+  border: 1px solid rgba(46, 125, 50, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.aos-pwd-modify-btn {
+  background: var(--aos-surface-muted);
+  border: 1px solid var(--aos-border);
+  color: var(--aos-ink-muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.aos-pwd-modify-btn:hover {
+  background: var(--aos-surface);
+  color: var(--aos-ink);
+}
+.aos-config-input.is-hidden {
+  display: none !important;
+}
+
+/* Inline Confirmation Block */
+.aos-confirm-block {
+  background: rgba(245, 124, 0, 0.06);
+  border: 1px solid rgba(245, 124, 0, 0.25);
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 15px;
+}
+.confirm-message {
+  font-size: 12px;
+  color: #e65100;
+  font-weight: 500;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.confirm-buttons {
+  display: flex;
+  gap: 12px;
+}
+.confirm-buttons button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-confirm-yes {
+  background: #e65100;
+  color: white;
+  border: none;
+}
+.btn-confirm-yes:hover {
+  background: #d84315;
+}
+.btn-confirm-no {
+  background: var(--aos-surface-muted);
+  border: 1px solid var(--aos-border);
+  color: var(--aos-ink-muted);
+}
+.btn-confirm-no:hover {
+  background: var(--aos-surface);
+  color: var(--aos-ink);
+}

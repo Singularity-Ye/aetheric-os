@@ -9,10 +9,21 @@ import { CompatAdapter } from "./aetheric/CompatAdapter";
 import { AethericShellState } from "./aetheric/types";
 import { ScriptoriumSettings, DEFAULT_SETTINGS, ScriptoriumSettingTab, mergeSettings } from "./settings";
 import { ScriptoriumDashboardView, SCRIPTORIUM_DASHBOARD_VIEW } from "./views/ScriptoriumDashboardView";
-import { ChildProcess, spawn } from "child_process";
+import { ChildProcess, spawn, execFile } from "child_process";
 import * as path from "path";
+import * as fs from "fs";
 
 const HAMASXIANG_VIEW = "hamasxiang-console-view";
+
+export interface DaemonProbe {
+  online: boolean;
+  service?: string;
+  version?: string;
+  activeJobs: number;
+  error?: string;
+}
+
+export type DaemonOwnership = "offline" | "managed" | "external";
 
 export default class ScriptoriumPlugin extends Plugin {
   settings: ScriptoriumSettings = structuredClone(DEFAULT_SETTINGS);
@@ -22,6 +33,8 @@ export default class ScriptoriumPlugin extends Plugin {
   indexService!: VaultIndexService;
   hamasxiangAdapter!: HamasxiangAdapter;
   daemonProcess: ChildProcess | null = null;
+  daemonOwnership: DaemonOwnership = "offline";
+  daemonState: "idle" | "starting" | "stopping" = "idle";
   private saveTimer: number | null = null;
   private pollTimeout: number | null = null;
 
@@ -39,6 +52,7 @@ export default class ScriptoriumPlugin extends Plugin {
       this.settings.hamasxiangDaemonToken,
     );
     
+    void this.cleanupExpiredTempFiles();
     void this.startDaemon();
     
     let currentInterval = 15000;
@@ -188,17 +202,76 @@ export default class ScriptoriumPlugin extends Plugin {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     if (this.pollTimeout !== null) window.clearTimeout(this.pollTimeout);
     this.nativeUi.restore();
-    this.stopDaemon();
+    if (this.settings.stopDaemonOnUnload) {
+      void this.stopDaemon();
+    }
+  }
+
+  async probeDaemonHealth(timeoutMs = 2000): Promise<DaemonProbe> {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    const token = this.settings.hamasxiangDaemonToken;
+    const headers = new Headers();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    try {
+      const response = await fetch("http://127.0.0.1:8765/health", {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+      window.clearTimeout(timer);
+      if (!response.ok) {
+        return { online: false, activeJobs: 0, error: `HTTP ${response.status}` };
+      }
+      const data = await response.json() as any;
+      if (data && data.ok === true && data.service === "hamaxiang-daemon") {
+        return {
+          online: true,
+          service: data.service,
+          version: data.version,
+          activeJobs: typeof data.active_jobs === "number" ? data.active_jobs : 0,
+        };
+      }
+      return { online: false, activeJobs: 0, error: "未知服务类型" };
+    } catch (e) {
+      window.clearTimeout(timer);
+      return { online: false, activeJobs: 0, error: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   async startDaemon(): Promise<boolean> {
-    if (this.daemonProcess) {
-      new Notice("Hamasxiang Daemon 已在后台运行中");
-      return true;
+    if (this.daemonState !== "idle") {
+      new Notice("正在处理其他进程状态，请稍后...");
+      return false;
     }
-    const systemPath = "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system";
-    const scriptPath = path.join(systemPath, "hamaxiang_daemon.py");
+    this.daemonState = "starting";
     try {
+      const probe = await this.probeDaemonHealth(2000);
+      if (probe.online) {
+        this.daemonOwnership = "external";
+        this.daemonState = "idle";
+        this.logBus.append("success", "hamaxiang.lifecycle", "发现活动中的外部 Daemon，直接复用连接");
+        return true;
+      }
+      if (this.settings.daemonMode === "external") {
+        this.daemonOwnership = "offline";
+        this.daemonState = "idle";
+        this.logBus.append("info", "hamaxiang.lifecycle", "当前设为外部常驻模式且服务离线，跳过自动拉起");
+        return false;
+      }
+      if (this.daemonProcess) {
+        this.daemonOwnership = "managed";
+        this.daemonState = "idle";
+        return true;
+      }
+      const systemPath = this.settings.hamasxiangSystemPath;
+      if (!fs.existsSync(systemPath)) {
+        throw new Error(`配置的系统目录不存在: ${systemPath}`);
+      }
+      const scriptPath = path.join(systemPath, "hamaxiang_daemon.py");
+      if (!fs.existsSync(scriptPath)) {
+        throw new Error(`启动脚本未找到: ${scriptPath}`);
+      }
       this.daemonProcess = spawn("python", [scriptPath], {
         cwd: systemPath,
         detached: false,
@@ -207,33 +280,106 @@ export default class ScriptoriumPlugin extends Plugin {
       this.daemonProcess.on("close", (code) => {
         console.log(`[Hamasxiang Daemon] Process exited with code ${code}`);
         this.daemonProcess = null;
+        this.daemonOwnership = "offline";
         this.hamasxiangAdapter.refresh(true);
       });
-      this.logBus.append("success", "hamaxiang.lifecycle", "正在后台拉起本地 Daemon...");
+      this.daemonOwnership = "managed";
+      this.daemonState = "idle";
+      this.logBus.append("success", "hamaxiang.lifecycle", "天工台托管：正在后台拉起本地 Daemon...");
       window.setTimeout(() => {
         this.hamasxiangAdapter.refresh(true);
       }, 2000);
       return true;
     } catch (e) {
-      this.logBus.append("error", "hamaxiang.lifecycle", `启动 Daemon 失败：${e}`);
-      new Notice(`启动 Daemon 失败: ${e}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logBus.append("error", "hamaxiang.lifecycle", `启动 Daemon 失败：${msg}`);
+      new Notice(`启动 Daemon 失败: ${msg}`);
       this.daemonProcess = null;
+      this.daemonOwnership = "offline";
+      this.daemonState = "idle";
       return false;
     }
   }
 
-  stopDaemon(): void {
-    if (!this.daemonProcess) return;
-    try {
-      this.daemonProcess.kill();
-    } catch (e) {
-      console.warn("Failed to kill daemon process directly", e);
+  async stopDaemon(): Promise<boolean> {
+    if (this.daemonState !== "idle") {
+      new Notice("正在处理其他进程状态，请稍后...");
+      return false;
     }
+    this.daemonState = "stopping";
+    if (this.daemonOwnership !== "managed" || !this.daemonProcess) {
+      this.daemonState = "idle";
+      return true;
+    }
+    const proc = this.daemonProcess;
+    const pid = proc.pid;
     this.daemonProcess = null;
-    this.logBus.append("warn", "hamaxiang.lifecycle", "已终止本地 Daemon 进程");
-    window.setTimeout(() => {
+    this.logBus.append("warn", "hamaxiang.lifecycle", `正在尝试停止天工台托管进程 (PID: ${pid})...`);
+    try {
+      proc.kill();
+      let exited = false;
+      for (let i = 0; i < 6; i++) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        const probe = await this.probeDaemonHealth(800);
+        if (!probe.online) {
+          exited = true;
+          break;
+        }
+      }
+      if (!exited && pid) {
+        this.logBus.append("warn", "hamaxiang.lifecycle", `托管进程 (PID: ${pid}) 未按时退出，执行强制进程树清理...`);
+        if (process.platform === "win32") {
+          await new Promise<void>((resolve) => {
+            execFile("taskkill", ["/PID", String(pid), "/T", "/F"], (err) => {
+              if (err) console.error("[taskkill] error:", err);
+              resolve();
+            });
+          });
+        } else {
+          proc.kill("SIGKILL");
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+      }
+      const finalProbe = await this.probeDaemonHealth(1000);
+      if (finalProbe.online) {
+        this.logBus.append("error", "hamaxiang.lifecycle", "端口 8765 依然被占用，停止操作判定失败");
+        new Notice("停止 Daemon 失败，端口依然被占用");
+        this.daemonOwnership = "external";
+        this.daemonState = "idle";
+        return false;
+      }
+      this.daemonOwnership = "offline";
+      this.daemonState = "idle";
+      this.logBus.append("success", "hamaxiang.lifecycle", "已成功终止本地 Daemon 进程及子进程树");
       this.hamasxiangAdapter.refresh(true);
-    }, 1000);
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logBus.append("error", "hamaxiang.lifecycle", `停止 Daemon 异常: ${msg}`);
+      this.daemonState = "idle";
+      return false;
+    }
+  }
+
+  async cleanupExpiredTempFiles(): Promise<void> {
+    const systemPath = this.settings.hamasxiangSystemPath;
+    try {
+      if (!fs.existsSync(systemPath)) return;
+      const files = await fs.promises.readdir(systemPath);
+      const prefix = ".env.tmp-";
+      const now = Date.now();
+      for (const file of files) {
+        if (file.startsWith(prefix)) {
+          const filePath = path.join(systemPath, file);
+          const stat = await fs.promises.stat(filePath);
+          if (now - stat.mtimeMs > 24 * 3600 * 1000) {
+            await fs.promises.unlink(filePath).catch(() => {});
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to cleanup expired temp files", e);
+    }
   }
 
   async loadSettings(): Promise<void> {
