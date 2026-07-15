@@ -1308,34 +1308,88 @@ button.aos-chat-send-btn:active {
   margin: auto;
 }
 
-/* Tab Selector */
+/* Tab Selector capsule design */
 .aos-collection-tab-row {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--aos-border-strong);
-  padding-bottom: 10px;
-}
-.aos-collection-tab-btn {
+  display: inline-flex;
   background: var(--aos-surface-muted);
   border: 1px solid var(--aos-border);
+  border-radius: 20px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 24px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.aos-collection-tab-btn {
+  background: transparent;
+  border: none !important;
   color: var(--aos-ink-muted);
-  padding: 8px 16px;
-  border-radius: 8px;
+  padding: 6px 18px;
+  border-radius: 16px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .aos-collection-tab-btn:hover {
-  background: var(--aos-surface);
+  background: rgba(169, 111, 23, 0.08);
   color: var(--aos-ink);
-  border-color: var(--aos-border-strong);
 }
 .aos-collection-tab-btn.is-active {
-  background: var(--aos-gold);
-  border-color: var(--aos-gold);
-  color: white;
+  background: linear-gradient(135deg, #7d9e79, #5e7a5b) !important;
+  color: white !important;
+  box-shadow: 0 4px 10px rgba(94, 122, 91, 0.3) !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+}
+
+/* Enqueue form and tactile green button */
+.aos-job-enqueue-form {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+.aos-job-url-input {
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  font-size: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--aos-border-strong);
+  background: var(--aos-surface-muted);
+  color: var(--aos-ink);
+  transition: all 0.2s ease;
+}
+.aos-job-url-input:focus {
+  outline: none;
+  border-color: #7d9e79;
+  background: var(--aos-paper);
+  box-shadow: 0 0 0 3px rgba(125, 158, 121, 0.15);
+}
+.aos-job-submit-btn {
+  height: 38px;
+  padding: 0 20px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: none !important;
+  background: linear-gradient(135deg, #7d9e79, #5e7a5b) !important;
+  color: white !important;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(94, 122, 91, 0.25) !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.aos-job-submit-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 12px rgba(94, 122, 91, 0.35) !important;
+}
+.aos-job-submit-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 2px 4px rgba(94, 122, 91, 0.2) !important;
+}
+.aos-job-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Wide-grid 2-column layout */
