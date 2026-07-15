@@ -9,6 +9,8 @@ import { CompatAdapter } from "./aetheric/CompatAdapter";
 import { AethericShellState } from "./aetheric/types";
 import { ScriptoriumSettings, DEFAULT_SETTINGS, ScriptoriumSettingTab, mergeSettings } from "./settings";
 import { ScriptoriumDashboardView, SCRIPTORIUM_DASHBOARD_VIEW } from "./views/ScriptoriumDashboardView";
+import { ChildProcess, spawn } from "child_process";
+import * as path from "path";
 
 const HAMASXIANG_VIEW = "hamasxiang-console-view";
 
@@ -19,6 +21,7 @@ export default class ScriptoriumPlugin extends Plugin {
   nativeUi = new NativeUiService();
   indexService!: VaultIndexService;
   hamasxiangAdapter!: HamasxiangAdapter;
+  daemonProcess: ChildProcess | null = null;
   private saveTimer: number | null = null;
   private pollTimeout: number | null = null;
 
@@ -35,6 +38,8 @@ export default class ScriptoriumPlugin extends Plugin {
       "http://127.0.0.1:8765",
       this.settings.hamasxiangDaemonToken,
     );
+    
+    void this.startDaemon();
     
     let currentInterval = 15000;
     const poll = async () => {
@@ -183,6 +188,52 @@ export default class ScriptoriumPlugin extends Plugin {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     if (this.pollTimeout !== null) window.clearTimeout(this.pollTimeout);
     this.nativeUi.restore();
+    this.stopDaemon();
+  }
+
+  async startDaemon(): Promise<boolean> {
+    if (this.daemonProcess) {
+      new Notice("Hamasxiang Daemon 已在后台运行中");
+      return true;
+    }
+    const systemPath = "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system";
+    const scriptPath = path.join(systemPath, "hamaxiang_daemon.py");
+    try {
+      this.daemonProcess = spawn("python", [scriptPath], {
+        cwd: systemPath,
+        detached: false,
+        stdio: "ignore",
+      });
+      this.daemonProcess.on("close", (code) => {
+        console.log(`[Hamasxiang Daemon] Process exited with code ${code}`);
+        this.daemonProcess = null;
+        this.hamasxiangAdapter.refresh(true);
+      });
+      this.logBus.append("success", "hamaxiang.lifecycle", "正在后台拉起本地 Daemon...");
+      window.setTimeout(() => {
+        this.hamasxiangAdapter.refresh(true);
+      }, 2000);
+      return true;
+    } catch (e) {
+      this.logBus.append("error", "hamaxiang.lifecycle", `启动 Daemon 失败：${e}`);
+      new Notice(`启动 Daemon 失败: ${e}`);
+      this.daemonProcess = null;
+      return false;
+    }
+  }
+
+  stopDaemon(): void {
+    if (!this.daemonProcess) return;
+    try {
+      this.daemonProcess.kill();
+    } catch (e) {
+      console.warn("Failed to kill daemon process directly", e);
+    }
+    this.daemonProcess = null;
+    this.logBus.append("warn", "hamaxiang.lifecycle", "已终止本地 Daemon 进程");
+    window.setTimeout(() => {
+      this.hamasxiangAdapter.refresh(true);
+    }, 1000);
   }
 
   async loadSettings(): Promise<void> {

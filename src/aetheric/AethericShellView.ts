@@ -14,6 +14,8 @@ import {
 } from "obsidian";
 import ScriptoriumPlugin from "../main";
 import { CompatAdapter } from "./CompatAdapter";
+import * as fs from "fs";
+import * as path from "path";
 import { LogDock } from "./LogDock";
 import { VirtualFileList } from "./VirtualFileList";
 import {
@@ -56,6 +58,7 @@ export class AethericShellView extends ItemView {
   private unsubscribeIndex: (() => void) | null = null;
   private unsubscribeHamasxiang: (() => void) | null = null;
   private contextTab: ContextTab = "overview";
+  private collectionTab = "dashboard";
   private selectedNode: KnowledgeNodeViewModel | null = null;
   private commandResults!: HTMLDivElement;
   private commandMatches: KnowledgeNodeViewModel[] = [];
@@ -1005,44 +1008,345 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     }
   }
 
+  private readEnvConfig(): Record<string, string> {
+    const envPath = "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system\\.env";
+    try {
+      if (!fs.existsSync(envPath)) return {};
+      const content = fs.readFileSync(envPath, "utf-8");
+      const config: Record<string, string> = {};
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const index = trimmed.indexOf("=");
+        if (index > 0) {
+          const key = trimmed.substring(0, index).trim();
+          const val = trimmed.substring(index + 1).trim();
+          config[key] = val;
+        }
+      }
+      return config;
+    } catch (e) {
+      console.error("Failed to read env config", e);
+      return {};
+    }
+  }
+
+  private writeEnvConfig(updates: Record<string, string>): void {
+    const envPath = "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system\\.env";
+    try {
+      let content = "";
+      if (fs.existsSync(envPath)) {
+        content = fs.readFileSync(envPath, "utf-8");
+      }
+      const lines = content.split(/\r?\n/);
+      const keysToUpdate = new Set(Object.keys(updates));
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#")) {
+          const index = trimmed.indexOf("=");
+          if (index > 0) {
+            const key = trimmed.substring(0, index).trim();
+            if (keysToUpdate.has(key)) {
+              lines[i] = `${key}=${updates[key]}`;
+              keysToUpdate.delete(key);
+            }
+          }
+        }
+      }
+      
+      for (const key of keysToUpdate) {
+        lines.push(`${key}=${updates[key]}`);
+      }
+      
+      fs.writeFileSync(envPath, lines.join("\n"), "utf-8");
+    } catch (e) {
+      console.error("Failed to write env config", e);
+      throw e;
+    }
+  }
+
   private renderCollection(): void {
+    this.mainPane.empty();
     const snapshot = this.plugin.hamasxiangAdapter.getSnapshot();
     const page = this.mainPane.createDiv({ cls: "aos-page aos-hamasxiang-page" });
     const heading = page.createDiv({ cls: "aos-page-heading" });
     heading.createDiv({ cls: "aos-page-title", text: "采集 · 蛤蟆祥系统" });
     heading.createDiv({ cls: "aos-page-subtitle", text: "通过本地 Daemon 公共端点接入，不复制爬虫后端" });
 
+    // Render Tab Selector
+    const tabRow = page.createDiv({ cls: "aos-collection-tab-row" });
+    const tabs = [
+      { id: "dashboard", label: "📊 运行看板" },
+      { id: "sources", label: "📡 数据源与任务" },
+      { id: "config", label: "⚙️ 环境配置" }
+    ];
+    
+    tabs.forEach(tab => {
+      const btn = tabRow.createEl("button", {
+        cls: `aos-collection-tab-btn ${this.collectionTab === tab.id ? "is-active" : ""}`,
+        text: tab.label
+      });
+      btn.addEventListener("click", () => {
+        this.collectionTab = tab.id;
+        this.renderCollection();
+      });
+    });
+
+    if (this.collectionTab === "dashboard") {
+      this.renderCollectionDashboard(page, snapshot);
+    } else if (this.collectionTab === "sources") {
+      this.renderCollectionSources(page, snapshot);
+    } else {
+      this.renderCollectionConfig(page);
+    }
+  }
+
+  private renderCollectionDashboard(page: HTMLDivElement, snapshot: any): void {
     const hero = page.createDiv({ cls: "aos-hamasxiang-hero" });
     hero.createDiv({ cls: "aos-hamasxiang-mark", text: "🐸" });
     const intro = hero.createDiv();
-    intro.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥 · 采集与情报引擎" });
-    intro.createDiv({ cls: "aos-panel-note", text: "它现在是松果天工台的采集子系统；原控制台仍作为高级管理页保留。" });
+    intro.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥 · 本地 Daemon 托管面板" });
+    
+    const isManaged = this.plugin.daemonProcess !== null;
+    const daemonDetailText = isManaged ? "天工台单实例进程守护中" : "未开启托管 / 外部独立运行";
+    intro.createDiv({ cls: "aos-panel-note", text: `Daemon 状态: ${daemonDetailText}` });
+    
     const badge = hero.createSpan({ cls: `aos-service-badge ${snapshot.online ? "is-online" : "is-offline"}` });
     badge.createSpan({ cls: "aos-badge-dot" });
-    badge.createSpan({ text: snapshot.online ? "本地炉火在线" : "本地炉火离线" });
+    badge.createSpan({ text: snapshot.online ? "本地 Daemon 在线" : "本地 Daemon 离线" });
+
+    const controlRow = page.createDiv({ cls: "aos-action-row aos-daemon-controls" });
+    this.actionButton(controlRow, "刷新炉火", () => void this.plugin.hamasxiangAdapter.refresh(true));
+    this.actionButton(controlRow, "立即巡逻 X", () => void this.runXWatch());
+    
+    if (!snapshot.online) {
+      this.actionButton(controlRow, "🚀 启动 Daemon", () => void this.plugin.startDaemon());
+    } else if (isManaged) {
+      this.actionButton(controlRow, "🛑 停止 Daemon", () => void this.plugin.stopDaemon());
+    }
 
     const metrics = page.createDiv({ cls: "aos-metric-grid aos-adapter-metrics" });
-    this.metric(metrics, "Daemon", snapshot.online ? "在线" : "离线", snapshot.service);
-    this.metric(metrics, "活跃任务", `${snapshot.activeJobs}`, "来自 GET /health");
-    this.metric(metrics, "X Watch", this.xWatchLabel(snapshot.xWatch), "真实巡逻状态");
-    this.metric(metrics, "上轮新增", `${snapshot.xWatch.last_new_count ?? 0}`, snapshot.xWatch.last_success_at ?? "暂无成功时间");
-    this.metric(metrics, "下次巡逻", this.formatNextRun(snapshot.xWatch.next_run_at), "Daemon 调度");
+    this.metric(metrics, "端口/端点", snapshot.online ? "127.0.0.1:8765" : "未连接", snapshot.service);
+    this.metric(metrics, "服务版本", snapshot.version ? `v${snapshot.version}` : "--", "GET /health");
+    this.metric(metrics, "活跃任务数", `${snapshot.activeJobs}`, "排队或抓取中");
+    this.metric(metrics, "X Watch 状态", this.xWatchLabel(snapshot.xWatch), "定时任务循环");
+    this.metric(metrics, "下次巡逻时间", this.formatNextRun(snapshot.xWatch.next_run_at), "X Watch");
 
-    const panel = page.createDiv({ cls: "aos-panel" });
-    panel.createDiv({ cls: "aos-panel-title", text: "采集操作" });
-    panel.createDiv({ cls: "aos-panel-note", text: snapshot.error ? `最近连接错误：${snapshot.error}` : "数据来自 127.0.0.1:8765；仅在点击操作时触发任务。" });
-    const actions = panel.createDiv({ cls: "aos-action-row" });
-    this.actionButton(actions, "刷新炉火状态", () => void this.plugin.hamasxiangAdapter.refresh(true));
-    this.actionButton(actions, "立即巡逻 X", () => void this.runXWatch());
-    this.actionButton(actions, "打开完整蛤蟆祥控制台", () => void this.plugin.openHamasxiangConsole());
+    const grid = page.createDiv({ cls: "aos-collection-grid" });
+    
+    const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
+    const logPanel = leftPane.createDiv({ cls: "aos-panel aos-daemon-logs-panel" });
+    logPanel.createDiv({ cls: "aos-panel-title", text: "🐸 Daemon 实时运行日志" });
+    logPanel.createDiv({ cls: "aos-panel-note", text: "数据来自本地 logBus 监听器，过滤自 hamaxiang.daemon 通道" });
+    
+    const logsContainer = logPanel.createDiv({ cls: "aos-daemon-logs-console" });
+    const allLogs = this.plugin.logBus.getEntries();
+    const daemonLogs = allLogs.filter(entry => entry.source.startsWith("hamaxiang") || entry.source.startsWith("hamasxiang"));
+    
+    if (daemonLogs.length === 0) {
+      logsContainer.createDiv({ cls: "aos-empty-logs", text: "暂无 Daemon 日志，等待后台触发或启动服务。" });
+    } else {
+      for (const log of daemonLogs.slice(-100)) {
+        const line = logsContainer.createDiv({ cls: `aos-console-line is-${log.level}` });
+        const time = new Date(log.timestamp).toLocaleTimeString("zh-CN", { hour12: false });
+        line.createSpan({ cls: "console-time", text: `[${time}] ` });
+        line.createSpan({ cls: "console-msg", text: log.message });
+      }
+      window.setTimeout(() => {
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+      }, 50);
+    }
 
-    const tasks = page.createDiv({ cls: "aos-panel" });
-    tasks.createDiv({ cls: "aos-panel-title", text: "采集任务快照" });
-    this.renderTaskList(tasks, this.plugin.hamasxiangAdapter.getTasks(), false);
+    const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
+    const taskPanel = rightPane.createDiv({ cls: "aos-panel" });
+    taskPanel.createDiv({ cls: "aos-panel-title", text: "采集任务快照" });
+    this.renderTaskList(taskPanel, this.plugin.hamasxiangAdapter.getTasks(), false);
+    
+    const enqueuePanel = rightPane.createDiv({ cls: "aos-panel" });
+    enqueuePanel.createDiv({ cls: "aos-panel-title", text: "🎙️ 手动发起抖音抓取" });
+    enqueuePanel.createDiv({ cls: "aos-panel-note", text: "直接输入抖音分享链接（含 ASR 提取与 AI 摘要）" });
+    const form = enqueuePanel.createDiv({ cls: "aos-job-enqueue-form" });
+    const urlInput = form.createEl("input", {
+      cls: "aos-job-url-input",
+      attr: { placeholder: "输入抖音视频链接（如 https://v.douyin.com/...）" }
+    });
+    const submitBtn = form.createEl("button", {
+      cls: "aos-job-submit-btn",
+      text: "加入采集队列"
+    });
+    submitBtn.addEventListener("click", async () => {
+      const url = urlInput.value.trim();
+      if (!url) {
+        new Notice("请输入有效的视频链接");
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "入队中...";
+      try {
+        await this.enqueueDouyinJob(url);
+        urlInput.value = "";
+        new Notice("🎙️ 抖音抓取任务已成功入队！");
+      } catch (e) {
+        new Notice(`入队失败: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "加入采集队列";
+      }
+    });
+  }
 
-    const artifacts = page.createDiv({ cls: "aos-panel" });
-    artifacts.createDiv({ cls: "aos-panel-title", text: "最近产物" });
-    this.renderArtifactList(artifacts, this.plugin.hamasxiangAdapter.getArtifacts().slice(0, 8));
+  private async enqueueDouyinJob(url: string): Promise<void> {
+    const token = this.plugin.settings.hamasxiangDaemonToken;
+    if (!token) {
+      throw new Error("请先配置 蛤蟆祥 Daemon Token");
+    }
+    const response = await requestUrl({
+      url: "http://127.0.0.1:8765/capture-douyin",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ url, title: "手动采集任务" }),
+      throw: false
+    });
+    if (response.status !== 202) {
+      const data = response.json || {};
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    await this.plugin.hamasxiangAdapter.refresh(true);
+  }
+
+  private renderCollectionSources(page: HTMLDivElement, snapshot: any): void {
+    const env = this.readEnvConfig();
+    const grid = page.createDiv({ cls: "aos-collection-grid" });
+    
+    const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
+    
+    const xPanel = leftPane.createDiv({ cls: "aos-panel" });
+    xPanel.createDiv({ cls: "aos-panel-title", text: "📡 Twitter/X 情报数据源" });
+    xPanel.createDiv({ cls: "aos-panel-note", text: "配置要巡逻的 X 账号句柄列表（从 Daemon .env 读取）" });
+    
+    const handlesStr = env["X_WATCH_HANDLES"] || "";
+    const handles = handlesStr.split(",").map(h => h.trim()).filter(Boolean);
+    const tagsContainer = xPanel.createDiv({ cls: "aos-x-handles-tags" });
+    
+    if (handles.length === 0) {
+      tagsContainer.createDiv({ cls: "aos-empty-state", text: "当前未配置任何巡逻账号" });
+    } else {
+      handles.forEach(handle => {
+        const tag = tagsContainer.createDiv({ cls: "aos-x-handle-tag" });
+        tag.createSpan({ text: `@${handle}` });
+        const removeBtn = tag.createSpan({ cls: "remove-btn", text: "×" });
+        removeBtn.addEventListener("click", () => {
+          const updated = handles.filter(h => h !== handle).join(",");
+          env["X_WATCH_HANDLES"] = updated;
+          this.writeEnvConfig(env);
+          new Notice(`已移除账号 @${handle}，保存配置成功！`);
+          this.renderCollection();
+        });
+      });
+    }
+
+    const addForm = xPanel.createDiv({ cls: "aos-add-handle-form" });
+    const addInput = addForm.createEl("input", {
+      cls: "aos-add-handle-input",
+      attr: { placeholder: "新增巡逻账号句柄 (如 thsottiaux)" }
+    });
+    const addBtn = addForm.createEl("button", { cls: "aos-add-handle-btn", text: "➕ 添加" });
+    addBtn.addEventListener("click", () => {
+      const handle = addInput.value.trim().replace(/^@/, "");
+      if (!handle) return;
+      if (handles.includes(handle)) {
+        new Notice("此账号已在列表中");
+        return;
+      }
+      handles.push(handle);
+      env["X_WATCH_HANDLES"] = handles.join(",");
+      this.writeEnvConfig(env);
+      addInput.value = "";
+      new Notice(`已成功添加巡逻账号 @${handle}！`);
+      this.renderCollection();
+    });
+
+    const artPanel = leftPane.createDiv({ cls: "aos-panel" });
+    artPanel.createDiv({ cls: "aos-panel-title", text: "最近情报与采集产物" });
+    this.renderArtifactList(artPanel, this.plugin.hamasxiangAdapter.getArtifacts().slice(0, 10));
+
+    const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
+    
+    const guideCard = rightPane.createDiv({ cls: "aos-panel" });
+    guideCard.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥数据捕获说明" });
+    
+    const infoList = guideCard.createEl("ul", { cls: "aos-guide-list" });
+    infoList.createEl("li", { text: "ASR 引擎已设置为 Groq/Douyin 本地端点进行双轨自查。" });
+    infoList.createEl("li", { text: "X Watch 巡逻使用 Playwright 模拟真实浏览器，支持 headless 隐身模式。" });
+    infoList.createEl("li", { text: "收集箱数据会自动同步至松果天工台的[情报]与[最近产物]列表中。" });
+  }
+
+  private renderCollectionConfig(page: HTMLDivElement): void {
+    const env = this.readEnvConfig();
+    const configPanel = page.createDiv({ cls: "aos-panel aos-daemon-config-panel" });
+    configPanel.createDiv({ cls: "aos-panel-title", text: "⚙️ 蛤蟆祥 Daemon 环境配置编辑器" });
+    configPanel.createDiv({ cls: "aos-panel-note", text: "直接读取并安全回写 hamaxiang-system/.env 配置文件；保存后天工台将自动重启 Daemon 生效。" });
+
+    const form = configPanel.createDiv({ cls: "aos-config-form" });
+
+    const addConfigField = (key: string, name: string, desc: string, isPassword = false) => {
+      const row = form.createDiv({ cls: "aos-config-row" });
+      const info = row.createDiv({ cls: "aos-config-info" });
+      info.createDiv({ cls: "aos-config-name", text: name });
+      info.createDiv({ cls: "aos-config-desc", text: desc });
+      
+      const input = row.createEl("input", {
+        cls: "aos-config-input",
+        attr: { type: isPassword ? "password" : "text", value: env[key] || "" }
+      });
+      return input;
+    };
+
+    const dsKey = addConfigField("DEEPSEEK_API_KEY", "DeepSeek API 密钥", "本地大语言模型智能分析与提炼卡片摘要所用接口 Key", true);
+    const groqKey = addConfigField("GROQ_API_KEY", "Groq API 密钥", "用于快速进行 Douyin 音频 ASR 转换的本地端点凭证", true);
+    const handles = addConfigField("X_WATCH_HANDLES", "X Watch 巡逻账号", "Twitter 定时侦查目标（半角逗号分隔）");
+    const proxy = addConfigField("HTTP_PROXY", "本地 HTTP 代理", "解决国内网络连接 Worker 超时问题（例如 http://127.0.0.1:7897）");
+    const browserWait = addConfigField("DOUYIN_BROWSER_WAIT_MS", "抖音浏览器抓取等待时间 (ms)", "Playwright 模拟浏览页面加载的延迟阈值");
+
+    const saveBtn = configPanel.createEl("button", {
+      cls: "aos-config-save-btn",
+      text: "💾 保存配置并重启 Daemon"
+    });
+    
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "保存中...";
+      
+      env["DEEPSEEK_API_KEY"] = dsKey.value.trim();
+      env["GROQ_API_KEY"] = groqKey.value.trim();
+      env["X_WATCH_HANDLES"] = handles.value.trim();
+      env["HTTP_PROXY"] = proxy.value.trim();
+      env["HTTPS_PROXY"] = proxy.value.trim();
+      env["DOUYIN_BROWSER_WAIT_MS"] = browserWait.value.trim();
+      
+      try {
+        this.writeEnvConfig(env);
+        new Notice("配置已成功写入 .env 文件！");
+        
+        this.plugin.stopDaemon();
+        await this.plugin.startDaemon();
+        new Notice("蛤蟆祥 Daemon 进程已重置启动！");
+        
+        this.collectionTab = "dashboard";
+        this.renderCollection();
+      } catch (e) {
+        new Notice(`保存失败: ${e}`);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "💾 保存配置并重启 Daemon";
+      }
+    });
   }
 
   private renderTasks(): void {
