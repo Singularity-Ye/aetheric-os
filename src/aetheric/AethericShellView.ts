@@ -1138,16 +1138,17 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     const tabRow = page.createDiv({ cls: "aos-collection-tab-row" });
     const tabs = [
-      { id: "dashboard", label: "📊 运行看板" },
-      { id: "sources", label: "📡 数据源与任务" },
-      { id: "config", label: "⚙️ 环境配置" }
+      { id: "dashboard", icon: "📊", label: "运行看板" },
+      { id: "sources", icon: "📡", label: "数据源与任务" },
+      { id: "config", icon: "⚙️", label: "环境配置" }
     ];
     
     tabs.forEach(tab => {
       const btn = tabRow.createEl("button", {
-        cls: `aos-collection-tab-btn ${this.collectionTab === tab.id ? "is-active" : ""}`,
-        text: tab.label
+        cls: `aos-collection-tab-btn ${this.collectionTab === tab.id ? "is-active" : ""}`
       });
+      btn.createSpan({ cls: `aos-tab-icon is-${tab.id}`, text: tab.icon });
+      btn.createSpan({ cls: "aos-tab-label", text: tab.label });
       btn.addEventListener("click", async () => {
         this.collectionTab = tab.id;
         if (tab.id === "config" || tab.id === "sources") {
