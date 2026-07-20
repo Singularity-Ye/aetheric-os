@@ -1,8 +1,9 @@
-import { FileSystemAdapter, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { FileSystemAdapter, Notice, Plugin, TFile, WorkspaceLeaf, addIcon } from "obsidian";
 import { AethericShellView, AETHERIC_SHELL_VIEW } from "./aetheric/AethericShellView";
 import { AethericStore } from "./aetheric/AethericStore";
 import { LogBus } from "./aetheric/LogBus";
 import { NativeUiService } from "./aetheric/NativeUiService";
+import { LayoutCoordinator } from "./aetheric/LayoutCoordinator";
 import { VaultIndexService } from "./aetheric/VaultIndexService";
 import { HamasxiangAdapter } from "./aetheric/HamasxiangAdapter";
 import { CompatAdapter } from "./aetheric/CompatAdapter";
@@ -36,6 +37,7 @@ export default class ScriptoriumPlugin extends Plugin {
   store!: AethericStore;
   logBus = new LogBus();
   nativeUi = new NativeUiService();
+  layoutCoordinator!: LayoutCoordinator;
   indexService!: VaultIndexService;
   hamasxiangAdapter!: HamasxiangAdapter;
   daemonProcess: ChildProcess | null = null;
@@ -60,7 +62,14 @@ export default class ScriptoriumPlugin extends Plugin {
   private pollTimeout: number | null = null;
 
   async onload(): Promise<void> {
+    // Register custom minimalist Lucide frog icon (mathematically centered & scaled)
+    addIcon("frog", `<g transform="translate(8, 8) scale(3.5)" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M3 12a9 9 0 0 1 15 0"/><path d="M5 18a3 3 0 0 1 6 0"/><path d="M13 18a3 3 0 0 1 6 0"/><path d="M8 12a4 4 0 0 1 8 0"/><path d="M12 4v4"/><path d="M10 8h4"/><path d="M4 12V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"/><path d="M3 14v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/></g>`);
+
+    // Register custom minimalist Lucide pinecone icon (mathematically centered & scaled)
+    addIcon("pinecone", `<g transform="translate(8, 8) scale(3.5)" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M12 2C11 3 9 6 9 9c0 4 3 8 3 11 0-3 3-7 3-11 0-3-2-6-3-7z" /><path d="M12 6c-2 1-4 3-5 5.5.8.5 1.7.5 2.5 0" /><path d="M12 6c2 1 4 3 5 5.5-.8.5-1.7.5-2.5 0" /><path d="M12 10c-3 1.5-5 4-5.5 7 1.2.3 2.5-.2 3.5-1" /><path d="M12 10c3 1.5 5 4 5.5 7-1.2.3-2.5-.2-3.5-1" /><path d="M12 14c-2 1-3.5 2.5-4 4.5 1.3 0 2.5-.8 3-1.5" /><path d="M12 14c2 1 3.5 2.5 4 4.5-1.3 0-2.5-.8-3-1.5" /></g>`);
+
     await this.loadSettings();
+    this.layoutCoordinator = new LayoutCoordinator(this.app, this.nativeUi);
     this.store = new AethericStore(this.settings.shellState, state => {
       this.settings.shellState = state;
       this.scheduleSave();
@@ -155,58 +164,7 @@ export default class ScriptoriumPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-open", file => this.recordRecentFile(file)));
     this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
       if (!leaf || !this.store) return;
-      const type = leaf.view.getViewType();
-      if (type === AETHERIC_SHELL_VIEW) {
-        const workspaceContainer = this.app.workspace.containerEl;
-        if (!workspaceContainer.querySelector(".aos-page-transition-mask")) {
-          const mask = workspaceContainer.createDiv({ cls: "aos-page-transition-mask" });
-          mask.createDiv({ cls: "aos-spinner" });
-
-          if (this.settings.nativeUiHidden) {
-            this.app.workspace.leftSplit.collapse();
-            this.app.workspace.rightSplit.collapse();
-          }
-          this.nativeUi.apply(this.settings.nativeUiHidden);
-
-          window.setTimeout(() => {
-            mask.style.opacity = "0";
-            mask.style.pointerEvents = "none";
-            window.setTimeout(() => mask.remove(), 250);
-          }, 180);
-        } else {
-          if (this.settings.nativeUiHidden) {
-            this.app.workspace.leftSplit.collapse();
-            this.app.workspace.rightSplit.collapse();
-          }
-          this.nativeUi.apply(this.settings.nativeUiHidden);
-        }
-      } else if (type === "markdown") {
-        const isRightCollapsed = (this.app.workspace.rightSplit as any).collapsed;
-        const workspaceContainer = this.app.workspace.containerEl;
-
-        if (isRightCollapsed) {
-          if (!workspaceContainer.querySelector(".aos-page-transition-mask")) {
-            const mask = workspaceContainer.createDiv({ cls: "aos-page-transition-mask" });
-            mask.createDiv({ cls: "aos-spinner" });
-
-            this.nativeUi.apply(false);
-            this.app.workspace.rightSplit.expand();
-
-            window.setTimeout(() => {
-              mask.style.opacity = "0";
-              mask.style.pointerEvents = "none";
-              window.setTimeout(() => mask.remove(), 250);
-            }, 180);
-          } else {
-            this.nativeUi.apply(false);
-            this.app.workspace.rightSplit.expand();
-          }
-        } else {
-          this.nativeUi.apply(false);
-        }
-      } else {
-        this.nativeUi.apply(false);
-      }
+      this.layoutCoordinator.handleActiveView(leaf.view.getViewType(), this.settings.nativeUiHidden);
     }));
 
     this.app.workspace.onLayoutReady(() => {
@@ -228,7 +186,7 @@ export default class ScriptoriumPlugin extends Plugin {
   onunload(): void {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     if (this.pollTimeout !== null) window.clearTimeout(this.pollTimeout);
-    this.nativeUi.restore();
+    this.layoutCoordinator?.restore();
     if (this.analyticsService) {
       this.analyticsService.destroy();
     }

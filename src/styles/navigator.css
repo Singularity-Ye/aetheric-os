@@ -42,6 +42,13 @@
   box-shadow: 0 0 10px rgba(169, 111, 23, 0.3);
   transform: scale(1.08);
 }
+.aos-workspace-icon svg,
+.aos-collapsed-workspace svg {
+  width: 21px;
+  height: 21px;
+  display: block;
+  stroke-width: 2px;
+}
 
 .aos-nav-section { margin: 12px 0; }
 .aos-nav-section-title { margin: 0 4px 7px; color: var(--aos-ink-muted); font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }

@@ -178,9 +178,9 @@ export interface GraphData {
 export const DEFAULT_WORKSPACES: AethericWorkspace[] = [
   {
     id: "hamaxiang",
-    name: "蛤蟆祥系统",
-    icon: "🐸",
-    rootPaths: ["02_丹炉间（项目区）/松果天工台（Aetheric OS）/蛤蟆祥系统"],
+    name: "松果天工台",
+    icon: "pinecone",
+    rootPaths: ["02_丹炉间（项目区）/松果天工台（Aetheric OS）"],
     inboxPath: "00_松果池（收件箱）",
     projects: [
       { id: "intel-radar", name: "情报雷达重构", status: "规划中" },
@@ -195,7 +195,7 @@ export const DEFAULT_WORKSPACES: AethericWorkspace[] = [
   {
     id: "songguo",
     name: "松果屋博客",
-    icon: "🌲",
+    icon: "tree-pine",
     rootPaths: [
       "02_丹炉间（项目区）/松果屋·博客",
       "02_丹炉间（项目区）/松果天工台（Aetheric OS）/松果屋控制台",
@@ -210,9 +210,25 @@ export const DEFAULT_WORKSPACES: AethericWorkspace[] = [
     ],
   },
   {
+    id: "erliu-novelist",
+    name: "二流小说家",
+    icon: "feather",
+    rootPaths: ["02_丹炉间（项目区）/二流小说家"],
+    projects: [
+      { id: "erliu-h5-reset", name: "H5-first 重构", status: "进行中", rootPath: "02_丹炉间（项目区）/二流小说家" },
+      { id: "erliu-user-lab", name: "自用试读实验", status: "进行中", rootPath: "02_丹炉间（项目区）/二流小说家/02_自用验证" },
+      { id: "erliu-agent", name: "飞书项目管家", status: "已接入", rootPath: "02_丹炉间（项目区）/二流小说家/04_飞书项目管家" },
+    ],
+    capabilities: [
+      { id: "erliu-product-truth", name: "产品真源", description: "定位、用户思维与价值主张" },
+      { id: "erliu-progress", name: "进展收口", description: "任务卡、提交、阻断与下一步" },
+      { id: "erliu-fiction-eval", name: "小说试读", description: "自用口味、章节质量与追更反馈" },
+    ],
+  },
+  {
     id: "courses",
     name: "课程知识库",
-    icon: "📚",
+    icon: "book-open",
     rootPaths: ["01_藏经阁（知识库）"],
     projects: [],
     capabilities: [{ id: "course-import", name: "课程导入", description: "课程导入" }],
@@ -220,7 +236,7 @@ export const DEFAULT_WORKSPACES: AethericWorkspace[] = [
   {
     id: "bg3",
     name: "博德之门3",
-    icon: "⚔️",
+    icon: "swords",
     rootPaths: ["03_生活簿（生活区）/游艺录（游戏与娱乐）/博德之门3"],
     projects: [
       { id: "bg3-guides", name: "攻略索引", status: "进行中", rootPath: "03_生活簿（生活区）/游艺录（游戏与娱乐）/博德之门3" },

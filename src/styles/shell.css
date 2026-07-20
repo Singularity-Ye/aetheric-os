@@ -416,6 +416,57 @@ button.aos-chat-send-btn:active {
 .aos-intelligence-row.is-relevant:hover {
   background: color-mix(in srgb, var(--aos-gold) 9%, var(--aos-surface));
 }
+.aos-intelligence-row.is-attention {
+  border-left-color: var(--aos-red);
+  background: color-mix(in srgb, var(--aos-red) 6%, var(--aos-surface-muted));
+}
+.aos-intelligence-row.is-attention:hover {
+  background: color-mix(in srgb, var(--aos-red) 9%, var(--aos-surface));
+}
+.aos-attention-badge {
+  background: rgba(200, 86, 78, 0.12);
+  color: #b24332;
+  border: 1px solid rgba(200, 86, 78, 0.26);
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+.aos-intelligence-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+.aos-filter-label {
+  margin-right: 2px;
+  color: var(--aos-ink-muted);
+  font-size: 11px;
+}
+.aos-intelligence-filter {
+  min-height: 28px;
+  padding: 3px 9px;
+  border: 1px solid var(--aos-border);
+  border-radius: 6px;
+  background: var(--aos-surface-muted);
+  color: var(--aos-ink-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.aos-intelligence-filter:hover,
+.aos-intelligence-filter:focus-visible {
+  border-color: var(--aos-border-strong);
+  color: var(--aos-ink);
+}
+.aos-intelligence-filter.is-active {
+  border-color: rgba(169, 111, 23, 0.44);
+  background: rgba(169, 111, 23, 0.10);
+  color: var(--aos-gold-dark, #a96f17);
+  font-weight: 700;
+}
+.aos-intelligence-evidence-note { margin-bottom: 12px; }
 .aos-task-detail-container {
   display: flex;
   flex-direction: column;
@@ -922,16 +973,19 @@ button.aos-chat-send-btn:active {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: color-mix(in srgb, var(--aos-surface) 85%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background-color: color-mix(in srgb, var(--aos-surface) 94%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
   opacity: 1;
-  transition: opacity 0.2s ease-in-out;
+  transition: opacity 0.18s ease-out;
   pointer-events: auto;
+}
+
+.aos-page-transition-mask.is-leaving {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Accessibility: Support prefers-reduced-motion rules */
@@ -946,6 +1000,7 @@ button.aos-chat-send-btn:active {
 .aos-life-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  align-items: start;
   gap: 14px;
   margin-bottom: 14px;
 }
@@ -963,6 +1018,12 @@ button.aos-chat-send-btn:active {
   -webkit-backdrop-filter: blur(10px);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+.aos-life-status-card.is-loading {
+  min-height: 640px;
+}
+.aos-life-todo-card.is-loading {
+  min-height: 430px;
+}
 .theme-dark .aos-life-status-card,
 .theme-dark .aos-life-todo-card {
   background: linear-gradient(135deg, color-mix(in srgb, var(--aos-surface) 92%, #000) 0%, color-mix(in srgb, var(--aos-surface) 84%, #000) 100%);
@@ -972,144 +1033,172 @@ button.aos-chat-send-btn:active {
 .aos-life-date-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 12px;
+  min-width: 0;
+  margin: 5px 0 14px;
+  padding-left: 2px;
 }
-.aos-life-calendar-icon {
-  width: 52px;
-  height: 56px;
-  border-radius: 10px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  background: var(--aos-paper);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06), inset 0 -2px 0 rgba(0, 0, 0, 0.04);
-  border: 1px solid var(--aos-border-strong);
-  position: relative;
-}
-.aos-life-calendar-icon::before,
-.aos-life-calendar-icon::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  width: 4px;
-  height: 8px;
-  background: #444;
-  border-radius: 2px;
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
-  z-index: 2;
-}
-.aos-life-calendar-icon::before { left: 12px; }
-.aos-life-calendar-icon::after { right: 12px; }
-
-.aos-life-calendar-icon .month-tab {
-  background: linear-gradient(to bottom, #d32f2f 0%, #b71c1c 100%);
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 800;
-  text-align: center;
-  padding: 4px 0 2px 0;
-  letter-spacing: 1px;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
-}
-.aos-life-calendar-icon .day-num {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  font-weight: 900;
+.aos-life-date-number {
+  min-width: 56px;
   color: var(--aos-ink);
-  background: var(--aos-paper);
-  line-height: 1;
-  font-family: inherit;
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 0.92;
+  letter-spacing: -0.06em;
 }
 .aos-life-date-text {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  padding-left: 12px;
+  border-left: 1px solid var(--aos-border-strong);
 }
 .aos-life-date-text .weekday {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
   color: var(--aos-ink);
   line-height: 1.2;
 }
-.aos-life-date-text .full-date {
-  font-size: 11px;
+.aos-life-date-text .month-year {
+  margin-bottom: 3px;
+  font-size: 9px;
+  font-weight: 800;
   color: var(--aos-ink-muted);
-  margin-top: 2px;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.aos-weather-widget {
+.aos-life-icon-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
+  gap: 7px;
+}
+.aos-life-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  color: var(--aos-gold-dark, #a96f17);
+}
+.aos-life-title-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
+}
+.aos-weather-widget {
+  --weather-accent: #68809a;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-content: center;
+  gap: 7px 12px;
+  padding: 11px 13px;
   border-radius: 12px;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  color: #ffffff !important;
+  margin-bottom: 0;
+  box-shadow: none;
+  color: var(--aos-ink);
   position: relative;
   overflow: hidden;
-  border: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-bottom: 14px;
+  border: 1px solid color-mix(in srgb, var(--weather-accent) 28%, var(--aos-border));
+  border-left: 4px solid var(--weather-accent);
+  background: color-mix(in srgb, var(--weather-accent) 5%, var(--aos-surface-muted));
 }
 .aos-weather-widget.is-sunny {
-  background: linear-gradient(135deg, #f8a145 0%, #f06922 100%);
+  --weather-accent: #c7851e;
 }
 .aos-weather-widget.is-cloudy {
-  background: linear-gradient(135deg, #7c98b3 0%, #536c84 100%);
+  --weather-accent: #718397;
 }
 .aos-weather-widget.is-rainy {
-  background: linear-gradient(135deg, #4b7cb2 0%, #294c72 100%);
+  --weather-accent: #3975a8;
 }
 .aos-weather-widget.is-snowy {
-  background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
-  color: #333333 !important;
+  --weather-accent: #6c96ad;
 }
 .aos-weather-current {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+}
+.aos-weather-current .weather-symbol {
+  color: var(--weather-accent);
+  font-size: 22px;
+  line-height: 1;
+}
+.aos-weather-current .temperature-block {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
 }
 .aos-weather-current .temp-val {
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 900;
-  color: inherit;
+  color: var(--aos-ink);
   line-height: 1;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 .aos-weather-current .desc-val {
   font-size: 11px;
   font-weight: 700;
-  color: inherit;
-  opacity: 0.95;
+  color: var(--aos-ink-muted);
+  white-space: nowrap;
 }
-.aos-weather-current .details-val {
-  font-size: 9px;
-  color: inherit;
-  opacity: 0.8;
-}
-.aos-weather-forecast {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: right;
-  border-left: 1px solid rgba(255, 255, 255, 0.2);
-  padding-left: 14px;
-}
-.aos-weather-widget.is-snowy .aos-weather-forecast {
-  border-left-color: rgba(0, 0, 0, 0.1);
-}
-.aos-weather-forecast .forecast-day {
-  font-size: 10px;
+.aos-weather-details {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.aos-weather-details span {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--weather-accent) 18%, var(--aos-border));
+  border-radius: 999px;
+  color: var(--aos-ink-muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.aos-weather-advice {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
   gap: 8px;
+  min-width: 0;
+  padding-top: 6px;
+  border-top: 1px dashed color-mix(in srgb, var(--weather-accent) 25%, transparent);
+}
+.aos-weather-advice .advice-label {
+  flex-shrink: 0;
+  color: var(--weather-accent);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.aos-weather-advice .advice-text {
+  min-width: 0;
+  color: var(--aos-ink);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.aos-weather-forecast {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 12px;
+  color: var(--aos-ink-muted);
+}
+.aos-weather-forecast .forecast-day {
+  font-size: 9px;
+  display: flex;
+  gap: 5px;
   color: inherit;
-  opacity: 0.9;
 }
 .aos-weather-forecast .forecast-day .day-name {
-  font-weight: 800;
+  color: var(--weather-accent);
+  font-weight: 900;
 }
 .aos-life-sub-title {
   font-size: 12px;
@@ -1206,8 +1295,34 @@ button.aos-chat-send-btn:active {
 }
 
 /* Right card: Todo list styling */
+.aos-life-todo-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.aos-life-todo-progress-text {
+  flex-shrink: 0;
+  color: var(--aos-ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.aos-life-todo-progress-track {
+  width: 100%;
+  height: 5px;
+  margin: 0 0 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--aos-gold) 12%, var(--aos-surface-muted));
+}
+.aos-life-todo-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--aos-gold), #d59c36);
+  transition: width 0.25s ease;
+}
 .aos-life-todo-list {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1229,6 +1344,10 @@ button.aos-chat-send-btn:active {
   border-color: rgba(169, 111, 23, 0.2);
   background: var(--aos-surface);
   box-shadow: 0 2px 8px rgba(169, 111, 23, 0.02);
+}
+.aos-life-todo-row.is-completed {
+  background: color-mix(in srgb, var(--aos-surface-muted) 70%, transparent);
+  opacity: 0.74;
 }
 .aos-life-todo-cb {
   appearance: none;
@@ -1277,7 +1396,7 @@ button.aos-chat-send-btn:active {
   gap: 10px;
   border-top: 1px dashed var(--aos-border-strong);
   padding-top: 14px;
-  margin-top: auto;
+  margin-top: 2px;
 }
 .aos-life-todo-input,
 .aos-life-inspiration-input {
@@ -1306,6 +1425,24 @@ button.aos-chat-send-btn:active {
   border-radius: 50%;
   animation: aos-spin-rotation 0.75s linear infinite;
   margin: auto;
+}
+
+@media (max-width: 1120px) {
+  .aos-life-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .aos-life-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .aos-life-todo-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
 }
 
 /* Tab Selector - Celadon & Gold Instrument styling */
@@ -1526,6 +1663,170 @@ button.aos-chat-send-btn:active {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* First-pass operations workbench cleanup: group commands and reserve warning tone. */
+.aos-ops-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.aos-ops-title-icon {
+  display: inline-flex;
+  color: var(--aos-gold-dark, #a96f17);
+}
+.aos-ops-title-icon svg { width: 18px; height: 18px; }
+.aos-ops-grab-section {
+  margin: 14px 0 12px;
+  padding: 12px;
+  border: 1px dashed var(--aos-border-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--aos-gold) 4%, var(--aos-surface));
+}
+.aos-ops-section-label {
+  color: var(--aos-ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+.aos-ops-section-note {
+  margin: 5px 0 10px;
+  color: var(--aos-ink-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.aos-grab-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.aos-grab-input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--aos-border-strong);
+  border-radius: 7px;
+  background: var(--aos-paper);
+  color: var(--aos-ink);
+}
+.aos-ops-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.aos-ops-action-grid .aos-btn {
+  min-height: 42px;
+  border-radius: 8px;
+  border-color: var(--aos-border);
+  background: var(--aos-surface);
+  color: var(--aos-ink);
+  font-weight: 700;
+  text-align: left;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.aos-ops-action-grid .aos-btn:hover {
+  border-color: var(--aos-gold);
+  background: var(--aos-surface-muted);
+  transform: translateY(-1px);
+}
+.aos-ops-action-grid .aos-ops-caution {
+  border-color: rgba(197, 139, 43, .42);
+  color: var(--aos-gold-dark, #a96f17);
+}
+.aos-preview-panel .aos-ops-action-grid { margin-top: 10px; }
+.aos-preview-action {
+  position: relative;
+  padding-left: 34px !important;
+}
+.aos-preview-action::before {
+  position: absolute;
+  left: 13px;
+  color: var(--aos-gold-dark, #a96f17);
+  font-weight: 800;
+}
+.aos-preview-action:first-child::before { content: "↗"; }
+.aos-preview-action:nth-child(2)::before { content: "◉"; }
+
+/* Git controls are a guarded flow, not three unrelated generic buttons. */
+.aos-git-backup-panel { overflow: hidden; }
+.aos-git-flow-note {
+  margin-top: 9px;
+  padding: 8px 10px;
+  border-left: 3px solid rgba(169, 111, 23, .45);
+  background: rgba(169, 111, 23, .055);
+  color: var(--aos-ink-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.aos-git-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+.aos-git-action,
+.aos-git-backup-action {
+  min-height: 40px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.aos-git-action {
+  border: 1px solid var(--aos-border);
+  background: var(--aos-surface);
+  color: var(--aos-ink);
+}
+.aos-git-action:hover:not(:disabled),
+.aos-git-action:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--aos-gold);
+  box-shadow: 0 4px 12px rgba(91, 64, 30, .08);
+}
+.aos-git-scan { color: var(--aos-gold-dark, #a96f17); }
+.aos-git-remote { color: var(--aos-blueprint, #0369a1); }
+.aos-git-action.is-loading { cursor: wait; opacity: .74; }
+.aos-git-backup-action {
+  width: 100%;
+  margin-top: 2px;
+  border: 1px solid rgba(40, 88, 58, .42);
+  background: rgba(40, 88, 58, .09);
+  color: #28583a;
+}
+.aos-git-backup-action:hover:not(:disabled),
+.aos-git-backup-action:focus-visible {
+  transform: translateY(-1px);
+  background: rgba(40, 88, 58, .14);
+  box-shadow: 0 4px 12px rgba(40, 88, 58, .10);
+}
+.aos-git-backup-action:disabled { cursor: not-allowed; opacity: .48; }
+
+/* Capability buttons are drafts until a real Agent executor is connected. */
+.aos-capability-draft-btn {
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border: 1px dashed var(--aos-border-strong);
+  border-radius: 6px;
+  background: var(--aos-surface-muted);
+  color: var(--aos-ink-muted);
+  text-align: left;
+  font-size: 10px;
+  cursor: pointer;
+}
+.aos-capability-draft-btn:hover,
+.aos-capability-draft-btn:focus-visible {
+  border-color: var(--aos-gold);
+  color: var(--aos-gold-dark, #a96f17);
+  background: var(--aos-surface);
+}
+@media (max-width: 760px) {
+  .aos-ops-action-grid { grid-template-columns: 1fr; }
+  .aos-grab-row { align-items: stretch; flex-wrap: wrap; }
+  .aos-grab-input { flex-basis: 100%; }
 }
 
 /* Local Terminal Console */
@@ -1839,23 +2140,66 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   color: var(--aos-ink);
 }
 
-/* Single handle test button inside tags */
-.aos-x-handle-tag .test-btn {
-  margin-left: 6px;
-  cursor: pointer;
+/* Source configuration states and explicit per-handle actions. */
+.aos-source-sync-state {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.aos-source-sync-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--aos-border);
+  border-radius: 8px;
+  background: var(--aos-surface-muted);
+}
+.aos-source-sync-label {
+  font-size: 10px;
+  color: var(--aos-ink-muted);
+}
+.aos-source-sync-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--aos-ink);
+}
+.aos-source-sync-value.is-current { color: #28583a; }
+.aos-source-sync-value.is-pending { color: #a96f17; }
+.aos-x-handle-tag {
+  padding-right: 6px;
+}
+.aos-x-handle-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+}
+.aos-x-handle-action {
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
   color: var(--aos-ink-muted);
   font-size: 10px;
-  display: inline-block;
-  transition: color 0.15s ease, transform 0.15s ease;
+  cursor: pointer;
 }
-.aos-x-handle-tag .test-btn:hover {
-  color: #2e7d32;
-  transform: scale(1.2);
+.aos-x-handle-action:hover,
+.aos-x-handle-action:focus-visible {
+  border-color: var(--aos-border-strong);
+  background: var(--aos-surface);
+  color: var(--aos-ink);
 }
-.aos-x-handle-tag .test-btn.is-running {
-  animation: aos-spin 1s linear infinite;
-  pointer-events: none;
-  color: #2e7d32;
+.aos-x-handle-test:hover,
+.aos-x-handle-test:focus-visible { color: #28583a; }
+.aos-x-handle-remove:hover,
+.aos-x-handle-remove:focus-visible { color: #b24332; }
+.aos-x-handle-test.is-running { color: #28583a; }
+@media (max-width: 520px) {
+  .aos-source-sync-state { grid-template-columns: 1fr; }
 }
 
 @keyframes aos-spin {

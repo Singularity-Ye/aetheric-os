@@ -127,6 +127,25 @@ export class HamasxiangOperationsService {
     this.runCommand("sync", python, ["-u", script, "--sync"], systemPath, "云端归流", onProgress);
   }
 
+  /** Export the allow-listed Vault notes for the cloud robot. */
+  runKnowledgeExport(onProgress?: OperationProgressCallback): void {
+    const python = "python";
+    const systemPath = this.plugin.settings.hamasxiangSystemPath;
+    const script = path.join(systemPath, "knowledge_bridge.py");
+    const vaultPath = this.getVaultPath();
+    if (!fs.existsSync(script)) {
+      throw new Error(`知识镜像脚本不存在，请检查蛤蟆祥 System 路径：${script}`);
+    }
+    this.runCommand(
+      "knowledge-export",
+      python,
+      ["-u", script, "export", "--vault", vaultPath, "--output", path.join("data", "knowledge", "export")],
+      systemPath,
+      "知识镜像导出",
+      onProgress,
+    );
+  }
+
   /**
    * Run Manual Grab URL
    */

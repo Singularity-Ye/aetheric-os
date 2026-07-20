@@ -95,6 +95,7 @@ export class HamasxiangAdapter {
   private resourceErrors = new Set<string>();
   private listeners = new Set<(snapshot: Readonly<HamasxiangSnapshot>) => void>();
   private refreshing: Promise<HamasxiangSnapshot> | null = null;
+  private lastPublishedSignature: string | null = null;
 
   constructor(
     private logBus: LogBus,
@@ -104,6 +105,7 @@ export class HamasxiangAdapter {
 
   setAuthToken(token: string): void {
     this.authToken = token.trim();
+    this.lastPublishedSignature = null;
   }
 
   getSnapshot(): Readonly<HamasxiangSnapshot> {
@@ -157,7 +159,6 @@ export class HamasxiangAdapter {
 
   subscribe(listener: (snapshot: Readonly<HamasxiangSnapshot>) => void): () => void {
     this.listeners.add(listener);
-    listener(this.snapshot);
     return () => this.listeners.delete(listener);
   }
 
@@ -219,7 +220,7 @@ export class HamasxiangAdapter {
       this.daemonTasks = [];
       if (verbose || previousOnline) this.logBus.append("warn", "hamaxiang.health", `本地炉火离线：${message}`);
     }
-    this.emit();
+    this.emitIfChanged();
     return this.snapshot;
   }
 
@@ -246,7 +247,7 @@ export class HamasxiangAdapter {
         summary: item.summary ? String(item.summary) : undefined,
         originalText: item.original_text ? String(item.original_text) : undefined,
         sourceUrl: item.source_url ? String(item.source_url) : undefined,
-        createdAt: this.parseTime(item.created_at) ?? Date.now(),
+        createdAt: this.parseTime(item.created_at) ?? 0,
         path: item.path ? String(item.path) : undefined,
       }));
       this.resourceErrors.delete("artifacts");
@@ -270,8 +271,8 @@ export class HamasxiangAdapter {
         confidence: typeof item.confidence === "number" ? item.confidence : undefined,
         relevant: item.is_relevant === true,
         shouldNotify: item.should_notify === true,
-        tags: Array.isArray(item.tags) ? item.tags.map(tag => String(tag)) : [],
-        capturedAt: this.parseTime(item.captured_at) ?? Date.now(),
+        tags: Array.isArray(item.tags) ? item.tags.map(tag => String(tag)).sort() : [],
+        capturedAt: this.parseTime(item.captured_at) ?? 0,
         resultPath: item.result_path ? String(item.result_path) : undefined,
       }));
       this.resourceErrors.delete("intelligence");
@@ -312,7 +313,7 @@ export class HamasxiangAdapter {
       status,
       detail: parts.join(" · "),
       progress: status === "queued" ? 10 : status === "running" ? 55 : status === "success" ? 100 : 0,
-      updatedAt: this.parseTime(item.updated_at) ?? this.parseTime(item.created_at) ?? Date.now(),
+      updatedAt: this.parseTime(item.updated_at) ?? this.parseTime(item.created_at) ?? 0,
       action: { label: "打开来源", command: "open-hamasxiang-console" },
     };
   }
@@ -343,6 +344,34 @@ export class HamasxiangAdapter {
 
   private emit(): void {
     for (const listener of this.listeners) listener(this.snapshot);
+  }
+
+  private emitIfChanged(): void {
+    const signature = JSON.stringify({
+      snapshot: {
+        activeJobs: this.snapshot.activeJobs,
+        asr: this.snapshot.asr,
+        error: this.snapshot.error,
+        online: this.snapshot.online,
+        service: this.snapshot.service,
+        version: this.snapshot.version,
+        xWatch: {
+          enabled: this.snapshot.xWatch.enabled,
+          handles: this.snapshot.xWatch.handles,
+          last_new_count: this.snapshot.xWatch.last_new_count,
+          last_success_at: this.snapshot.xWatch.last_success_at,
+          next_run_at: this.snapshot.xWatch.next_run_at,
+          running: this.snapshot.xWatch.running,
+          status: this.snapshot.xWatch.status,
+        },
+      },
+      tasks: this.daemonTasks,
+      artifacts: this.artifacts,
+      intelligence: this.intelligence,
+    });
+    if (signature === this.lastPublishedSignature) return;
+    this.lastPublishedSignature = signature;
+    this.emit();
   }
 
   private mapXWatchStatus(xWatch: HamasxiangXWatchSnapshot): OperationTask["status"] {

@@ -68,6 +68,18 @@ export class AethericShellView extends ItemView {
   private analyticsSearchQuery = "";
   private ledgerDisplayLimit = 50;
   private isDedupEnabled: boolean | null = null;
+  private intelligenceFilter: "attention" | "relevant" | "all" = "attention";
+
+  private getWorkspaceEmoji(icon: string | undefined | null): string {
+    if (!icon) return "◇";
+    if (icon === "frog") return "🐸";
+    if (icon === "pinecone") return "🌲";
+    if (icon === "tree-pine") return "🌲";
+    if (icon === "feather") return "✒️";
+    if (icon === "book-open") return "📚";
+    if (icon === "swords") return "⚔️";
+    return icon;
+  }
   private isTogglingDedup = false;
   private contextTab: ContextTab = "overview";
   private collectionTab = "dashboard";
@@ -91,6 +103,10 @@ export class AethericShellView extends ItemView {
   private nativeGraphLeaf: any = null;
   private currentRenderId = 0;
   private agentRenderTx = 0;
+  private overviewPage: HTMLDivElement | null = null;
+  private overviewData: HTMLDivElement | null = null;
+  private lifeDashboard: { statusCard: HTMLDivElement; todoCard: HTMLDivElement } | null = null;
+  private lifeRefreshTx = 0;
   private borrowedClaudianEl: HTMLElement | null = null;
   private borrowedClaudianLeaf: any | null = null;
 
@@ -175,6 +191,10 @@ export class AethericShellView extends ItemView {
 
   async onClose(): Promise<void> {
     this.agentRenderTx++;
+    this.lifeRefreshTx++;
+    this.overviewPage = null;
+    this.overviewData = null;
+    this.lifeDashboard = null;
     this.restoreBorrowedClaudian();
     this.currentRenderId += 1;
     this.disposeNativeGraphView();
@@ -247,7 +267,7 @@ export class AethericShellView extends ItemView {
 
     this.workspaceSelect = topbar.createEl("select", { cls: "aos-workspace-select" });
     for (const workspace of this.plugin.settings.workspaces) {
-      this.workspaceSelect.createEl("option", { value: workspace.id, text: `${workspace.icon ?? "◇"} ${workspace.name}` });
+      this.workspaceSelect.createEl("option", { value: workspace.id, text: `${this.getWorkspaceEmoji(workspace.icon)} ${workspace.name}` });
     }
     this.workspaceSelect.value = this.plugin.store.getSnapshot().selectedWorkspaceId;
     this.workspaceSelect.addEventListener("change", () => this.selectWorkspace(this.workspaceSelect.value));
@@ -330,14 +350,24 @@ export class AethericShellView extends ItemView {
 
     if (!workspace) return;
     const workspaceCard = this.navigator.createDiv({ cls: "aos-workspace-card" });
-    workspaceCard.createSpan({ cls: "aos-workspace-icon", text: workspace.icon ?? "◇" });
+    const iconSpan = workspaceCard.createSpan({ cls: "aos-workspace-icon" });
+    if (workspace.icon && /^[a-z-]+$/.test(workspace.icon)) {
+      setIcon(iconSpan, workspace.icon);
+    } else {
+      iconSpan.setText(workspace.icon ?? "◇");
+    }
     const text = workspaceCard.createDiv();
     text.createDiv({ cls: "aos-workspace-name", text: workspace.name });
     text.createDiv({ cls: "aos-workspace-desc", text: "工作域 · 项目 · 能力 · 知识节点" });
 
     if (state.navigatorMode === "collapsed") {
       for (const item of this.plugin.settings.workspaces) {
-        const button = this.navigator.createEl("button", { cls: "aos-collapsed-workspace", text: item.icon ?? "◇" });
+        const button = this.navigator.createEl("button", { cls: "aos-collapsed-workspace" });
+        if (item.icon && /^[a-z-]+$/.test(item.icon)) {
+          setIcon(button, item.icon);
+        } else {
+          button.setText(item.icon ?? "◇");
+        }
         button.setAttribute("title", item.name);
         button.classList.toggle("is-active", item.id === workspace.id);
         button.addEventListener("click", () => this.selectWorkspace(item.id));
@@ -492,7 +522,6 @@ export class AethericShellView extends ItemView {
     this.currentRenderId += 1;
     this.virtualList?.destroy();
     this.virtualList = null;
-    this.mainPane.empty();
     const module = this.plugin.store.getSnapshot().activeModule;
 
     const nonNoteModules = ["collection", "tasks", "intelligence", "logs"];
@@ -504,8 +533,20 @@ export class AethericShellView extends ItemView {
       this.plugin.analyticsService.setActive(false);
     }
 
-    if (module === "overview") this.renderOverview();
-    else if (module === "navigation") this.renderNavigation();
+    if (module === "overview") {
+      this.renderOverview();
+      return;
+    }
+
+    // The private life dashboard belongs to the overview shell. Invalidate pending
+    // reads before the overview DOM is removed so stale promises cannot paint later.
+    this.lifeRefreshTx++;
+    this.overviewPage = null;
+    this.overviewData = null;
+    this.lifeDashboard = null;
+    this.mainPane.empty();
+
+    if (module === "navigation") this.renderNavigation();
     else if (module === "collection") this.renderCollection();
     else if (module === "tasks") this.renderTasks();
     else if (module === "intelligence") this.renderIntelligence();
@@ -515,18 +556,34 @@ export class AethericShellView extends ItemView {
   }
 
   private renderOverview(): void {
+    // Index and Daemon updates may be frequent. Keep the private life panel mounted
+    // and only refresh the workspace-scoped part of the overview.
+    if (this.overviewPage?.isConnected && this.overviewData?.isConnected) {
+      this.renderOverviewData(this.overviewData);
+      return;
+    }
+
     this.mainPane.empty();
     const page = this.mainPane.createDiv({ cls: "aos-page aos-overview-page" });
+    this.overviewPage = page;
     const heading = page.createDiv({ cls: "aos-page-heading" });
     heading.createDiv({ cls: "aos-page-title", text: "总览 Overview" });
     heading.createDiv({ cls: "aos-page-subtitle", text: "真实 Vault 活动、当前工作域与知识流状态" });
 
     this.renderLifeDashboard(page);
 
+    const overviewData = page.createDiv({ cls: "aos-overview-workspace-data" });
+    this.overviewData = overviewData;
+    this.renderOverviewData(overviewData);
+  }
+
+  private renderOverviewData(parent: HTMLElement): void {
+    parent.empty();
+
     const workspace = this.getWorkspace();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const metrics = page.createDiv({ cls: "aos-metric-grid" });
+    const metrics = parent.createDiv({ cls: "aos-metric-grid" });
     const adapterTasks = this.plugin.hamasxiangAdapter.getTasks();
     const runningTasks = adapterTasks.filter(task => task.status === "running" || task.status === "queued").length;
     const failedTasks = adapterTasks.filter(task => task.status === "failed" || task.status === "offline").length;
@@ -536,7 +593,7 @@ export class AethericShellView extends ItemView {
     this.metric(metrics, "运行任务", `${runningTasks}`, failedTasks ? `${failedTasks} 项需关注` : "Adapter 观测正常");
     this.metric(metrics, "最近访问", `${this.plugin.store.getSnapshot().recentFilePaths.length}`, "真实打开记录");
 
-    const grid = page.createDiv({ cls: "aos-overview-grid" });
+    const grid = parent.createDiv({ cls: "aos-overview-grid" });
     const activity = grid.createDiv({ cls: "aos-panel aos-panel-wide" });
     activity.createDiv({ cls: "aos-panel-title", text: "知识活动热力图 · 近 8 周" });
     this.renderHeatmap(activity, workspace);
@@ -562,7 +619,7 @@ export class AethericShellView extends ItemView {
     tasks.createDiv({ cls: "aos-panel-title", text: "当前任务快照" });
     this.renderTaskList(tasks, adapterTasks.slice(0, 4), true);
 
-    const legacy = page.createDiv({ cls: "aos-panel aos-legacy-actions" });
+    const legacy = parent.createDiv({ cls: "aos-panel aos-legacy-actions" });
     legacy.createDiv({ cls: "aos-panel-title", text: "现有控制台能力" });
     legacy.createDiv({ cls: "aos-panel-note", text: "Phase 1–2 保留旧工具入口，后台业务未迁移也未删除。" });
     const actions = legacy.createDiv({ cls: "aos-action-row" });
@@ -853,13 +910,13 @@ export class AethericShellView extends ItemView {
       capTitle.setAttribute("style", "font-size: 11px; font-weight: bold; margin-bottom: 8px; color: var(--aos-gold);");
       for (const cap of ws.capabilities) {
         const btn = capSection.createEl("button", {
-          cls: "aos-topbar-button",
-          text: "运行: " + cap.name
+          cls: "aos-capability-draft-btn",
+          text: "生成调度草案: " + cap.name
         });
-        btn.setAttribute("style", "width: 100%; margin-bottom: 6px; text-align: left; height: auto; padding: 6px 10px; font-size: 9px; display: block;");
+        btn.setAttribute("title", "当前仅写入协同 Agent 对话草案，不会启动外部 Agent 或修改节点内容。");
         btn.addEventListener("click", () => {
-          new Notice("正在调度 Agent 运行【" + cap.name + "】对当前节点【" + node.title + "】进行深度加工...");
-          void this.appendAgentChatMessage("System", "调度运行能力: " + cap.name + " (" + cap.id + ") 对当前节点 《" + node.title + "》");
+          new Notice("已生成 Agent 调度草案；当前不会自动启动 Agent 或修改节点内容。");
+          void this.appendAgentChatMessage("System", "调度草案: " + cap.name + " (" + cap.id + ") 对当前节点 《" + node.title + "》");
         });
       }
     }
@@ -1451,6 +1508,23 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     const handlesStr = env["X_WATCH_HANDLES"] || "";
     const handles = handlesStr.split(",").map(h => h.trim()).filter(Boolean);
+    const syncState = xPanel.createDiv({ cls: "aos-source-sync-state" });
+    const diskState = syncState.createDiv({ cls: "aos-source-sync-item" });
+    diskState.createSpan({ cls: "aos-source-sync-label", text: "已保存到 .env" });
+    diskState.createSpan({
+      cls: "aos-source-sync-value",
+      text: handles.length ? `${handles.length} 个巡逻账号` : "尚未配置"
+    });
+    const runtimeState = syncState.createDiv({ cls: "aos-source-sync-item" });
+    runtimeState.createSpan({ cls: "aos-source-sync-label", text: "Daemon 当前内存" });
+    runtimeState.createSpan({
+      cls: `aos-source-sync-value ${snapshot.online && diskHandles === memHandles ? "is-current" : "is-pending"}`,
+      text: !snapshot.online
+        ? "Daemon 未运行，启动后读取配置"
+        : diskHandles === memHandles
+          ? "已与 .env 一致"
+          : "仍在使用上一版配置"
+    });
     const tagsContainer = xPanel.createDiv({ cls: "aos-x-handles-tags" });
 
     if (handles.length === 0) {
@@ -1460,29 +1534,42 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         const tag = tagsContainer.createDiv({ cls: "aos-x-handle-tag" });
         tag.createSpan({ text: `@${handle}` });
 
-        // Single handle test button
-        const testBtn = tag.createSpan({ cls: "test-btn", text: "▶" });
-        testBtn.setAttribute("title", `测试单源抓取 @${handle}`);
+        const actions = tag.createDiv({ cls: "aos-x-handle-actions" });
+        const testBtn = actions.createEl("button", {
+          cls: "aos-x-handle-action aos-x-handle-test",
+          text: "测试巡逻",
+          attr: { type: "button", "aria-label": `测试单源抓取 @${handle}` }
+        });
+        testBtn.setAttribute("title", `仅为 @${handle} 发起一次测试巡逻`);
         testBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
           testBtn.classList.add("is-running");
-          new Notice(`📡 开始单源测试巡逻：@${handle}...`);
+          testBtn.disabled = true;
+          testBtn.textContent = "测试中…";
+          new Notice(`开始单源测试巡逻：@${handle}`);
           try {
             await this.plugin.hamasxiangAdapter.runXWatch(handle);
-            new Notice(`✅ @${handle} 单源测试巡逻已成功入队！`);
+            new Notice(`@${handle} 单源测试巡逻已入队`);
           } catch (err) {
-            new Notice(`❌ 测试失败: ${err instanceof Error ? err.message : String(err)}`);
+            new Notice(`测试失败：${err instanceof Error ? err.message : String(err)}`);
           } finally {
             testBtn.classList.remove("is-running");
+            testBtn.disabled = false;
+            testBtn.textContent = "测试巡逻";
           }
         });
 
-        const removeBtn = tag.createSpan({ cls: "remove-btn", text: "×" });
+        const removeBtn = actions.createEl("button", {
+          cls: "aos-x-handle-action aos-x-handle-remove",
+          text: "移除",
+          attr: { type: "button", "aria-label": `从 .env 配置中移除 @${handle}` }
+        });
+        removeBtn.setAttribute("title", `从 .env 配置中移除 @${handle}`);
         removeBtn.addEventListener("click", async () => {
           const updated = handles.filter(h => h !== handle).join(",");
           env["X_WATCH_HANDLES"] = updated;
           await this.saveEnvConfig(env);
-          new Notice(`已移除账号 @${handle}，保存配置成功！`);
+          new Notice(`已从 .env 配置移除 @${handle}`);
           this.renderCollection();
         });
       });
@@ -1491,9 +1578,9 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const addForm = xPanel.createDiv({ cls: "aos-add-handle-form" });
     const addInput = addForm.createEl("input", {
       cls: "aos-add-handle-input",
-      attr: { placeholder: "新增巡逻账号句柄 (如 thsottiaux)" }
+      attr: { placeholder: "新增巡逻账号句柄（如 thsottiaux）", "aria-label": "新增 X Watch 巡逻账号" }
     });
-    const addBtn = addForm.createEl("button", { cls: "aos-add-handle-btn", text: "➕ 添加" });
+    const addBtn = addForm.createEl("button", { cls: "aos-add-handle-btn", text: "添加账号", attr: { type: "button" } });
     addBtn.addEventListener("click", async () => {
       const handle = addInput.value.trim().replace(/^@/, "");
       if (!handle) return;
@@ -1505,7 +1592,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       env["X_WATCH_HANDLES"] = handles.join(",");
       await this.saveEnvConfig(env);
       addInput.value = "";
-      new Notice(`已成功添加巡逻账号 @${handle}！`);
+      new Notice(`已添加巡逻账号 @${handle} 到 .env 配置`);
       this.renderCollection();
     });
 
@@ -1515,12 +1602,12 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
     const guideCard = rightPane.createDiv({ cls: "aos-panel" });
-    guideCard.createDiv({ cls: "aos-panel-title", text: "蛤蟆祥数据捕获说明" });
+    guideCard.createDiv({ cls: "aos-panel-title", text: "来源与运行说明" });
 
     const infoList = guideCard.createEl("ul", { cls: "aos-guide-list" });
-    infoList.createEl("li", { text: "ASR 引擎已设置为 Groq/Douyin 本地端点进行双轨自查。" });
-    infoList.createEl("li", { text: "X Watch 巡逻使用 Playwright 模拟真实浏览器，支持 headless 隐身模式。" });
-    infoList.createEl("li", { text: "收集箱数据会自动同步至松果天工台的[情报]与[最近产物]列表中。" });
+    infoList.createEl("li", { text: "本页增删账号会先写入 Daemon 的 .env 配置文件。" });
+    infoList.createEl("li", { text: "运行中的 Daemon 不会自动改写内存配置；出现“上一版配置”提示时，按页面指引重启后生效。" });
+    infoList.createEl("li", { text: "X Watch 以本地浏览器会话巡逻；入库产物会显示在“最近情报与采集产物”。" });
   }
 
   private renderCollectionOperations(page: HTMLDivElement): void {
@@ -1528,28 +1615,27 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const leftPane = grid.createDiv({ cls: "aos-collection-left-pane" });
     const rightPane = grid.createDiv({ cls: "aos-collection-right-pane" });
 
-    // Left Panel 1: 仙术与重修法阵
     const opsPanel = leftPane.createDiv({ cls: "aos-panel" });
-    opsPanel.createDiv({ cls: "aos-panel-title", text: "🔮 仙术与重修法阵" });
-    opsPanel.createDiv({ cls: "aos-panel-note", text: "触发收件箱的抓取、云端同步、ASR 字幕精修与淬炼隔离等仙术法阵" });
+    const opsTitle = opsPanel.createDiv({ cls: "aos-panel-title aos-ops-title" });
+    const opsTitleIcon = opsTitle.createSpan({ cls: "aos-ops-title-icon" });
+    setIcon(opsTitleIcon, "wrench");
+    opsTitle.createSpan({ text: "工造中枢" });
+    opsPanel.createDiv({ cls: "aos-panel-note", text: "从采集到修复的本地执行入口。动作会进入真实进程队列，并在底部日志留下回执。" });
 
     // Row 1: 网页参悟 (Manual Grab URL)
-    const grabSection = opsPanel.createDiv({ cls: "aos-grab-section" });
-    grabSection.style.cssText = "margin-bottom: 12px; padding: 10px; border: 1px dashed var(--aos-border-gold); border-radius: 6px; background: rgba(197, 139, 43, 0.03);";
-    grabSection.createDiv({ cls: "aos-section-label", text: "📖 网页参悟" }).style.cssText = "font-weight: bold; font-size: 12px; margin-bottom: 6px; color: var(--aos-ink-gold);";
+    const grabSection = opsPanel.createDiv({ cls: "aos-grab-section aos-ops-grab-section" });
+    grabSection.createDiv({ cls: "aos-section-label aos-ops-section-label", text: "网页参悟" });
+    grabSection.createDiv({ cls: "aos-ops-section-note", text: "把一个链接加入采集队列；只有明确需要重跑已有卷宗时，才勾选覆写。" });
 
     const grabRow = grabSection.createDiv({ cls: "aos-grab-row" });
-    grabRow.style.cssText = "display: flex; gap: 8px; align-items: center;";
     const grabInput = grabRow.createEl("input", {
       cls: "aos-grab-input",
       attr: { placeholder: "请输入网页 URL (支持抖音/B站/小红书/网页)" }
     });
-    grabInput.style.cssText = "flex: 1; padding: 6px; font-size: 12px;";
 
     const forceLabel = grabRow.createEl("label");
-    forceLabel.style.cssText = "font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap;";
     const forceCheck = forceLabel.createEl("input", { attr: { type: "checkbox" } });
-    forceLabel.createSpan({ text: "强制覆写" });
+    forceLabel.createSpan({ text: "覆写已有结果" });
 
     const grabBtn = grabRow.createEl("button", { cls: "aos-btn", text: "参悟" });
     grabBtn.style.cssText = "padding: 6px 12px; font-size: 12px;";
@@ -1569,10 +1655,9 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     });
 
     // Row 2: Standard buttons
-    const btnGrid = opsPanel.createDiv();
-    btnGrid.style.cssText = "display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;";
+    const btnGrid = opsPanel.createDiv({ cls: "aos-ops-action-grid" });
 
-    const syncBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "📥 感应并拉取云端" });
+    const syncBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "感应并拉取云端" });
     syncBtn.addEventListener("click", () => {
       try {
         this.plugin.hamasxiangOperations.runSync();
@@ -1582,7 +1667,19 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
     });
 
-    const repairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "🛠️ 一键全库 ASR 精修" });
+    const knowledgeExportBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "导出知识镜像" });
+    knowledgeExportBtn.title = "只导出允许的收件箱与松果天工台笔记，不自动 Git 推送";
+    knowledgeExportBtn.addEventListener("click", () => {
+      try {
+        this.plugin.hamasxiangOperations.runKnowledgeExport();
+        new Notice("知识镜像已开始生成，完成后可在 hamaxiang-system/data/knowledge/export 检查。", 5000);
+        this.renderCollection();
+      } catch (err: any) {
+        new Notice(err.message);
+      }
+    });
+
+    const repairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "全库 ASR 精修" });
     repairBtn.addEventListener("click", () => {
       try {
         this.plugin.hamasxiangOperations.runRepair();
@@ -1592,7 +1689,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
     });
 
-    const biliRepairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "📺 B站 ASR 修复" });
+    const biliRepairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "B站 ASR 修复" });
     biliRepairBtn.addEventListener("click", () => {
       try {
         this.plugin.hamasxiangOperations.runPlatformRepair("bilibili");
@@ -1602,7 +1699,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
     });
 
-    const dyRepairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "🎵 抖音 ASR 修复" });
+    const dyRepairBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "抖音 ASR 修复" });
     dyRepairBtn.addEventListener("click", () => {
       try {
         this.plugin.hamasxiangOperations.runPlatformRepair("douyin");
@@ -1612,7 +1709,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
     });
 
-    const quarantineBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "🧪 淬炼隔离" });
+    const quarantineBtn = btnGrid.createEl("button", { cls: "aos-btn aos-ops-caution", text: "隔离异常卷宗" });
     quarantineBtn.addEventListener("click", () => {
       try {
         this.plugin.hamasxiangOperations.runQuarantine();
@@ -1622,7 +1719,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
     });
 
-    const restoreBtn = btnGrid.createEl("button", { cls: "aos-btn", text: "📜 还原残卷" });
+    const restoreBtn = btnGrid.createEl("button", { cls: "aos-btn aos-ops-caution", text: "还原隔离卷宗" });
     restoreBtn.addEventListener("click", () => {
       try {
         this.plugin.hamasxiangOperations.runRestore();
@@ -1632,16 +1729,13 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       }
     });
 
-    // Left Panel 2: 本地预览与发布
-    const previewPanel = leftPane.createDiv({ cls: "aos-panel" });
-    previewPanel.style.cssText = "margin-top: 14px;";
-    previewPanel.createDiv({ cls: "aos-panel-title", text: "🌍 本地预览与发布" });
+    const previewPanel = leftPane.createDiv({ cls: "aos-panel aos-preview-panel" });
+    previewPanel.createDiv({ cls: "aos-panel-title", text: "本地预览与发布" });
     previewPanel.createDiv({ cls: "aos-panel-note", text: "编译生成个人博客的图谱拓扑或启动本地开发服务器进行静态预览" });
 
-    const previewGrid = previewPanel.createDiv();
-    previewGrid.style.cssText = "display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;";
+    const previewGrid = previewPanel.createDiv({ cls: "aos-ops-action-grid" });
 
-    const publishBtn = previewGrid.createEl("button", { cls: "aos-btn", text: "⚙️ 编译图谱 (Astro)" });
+    const publishBtn = previewGrid.createEl("button", { cls: "aos-btn aos-preview-action", text: "编译图谱（Astro）" });
     publishBtn.addEventListener("click", () => {
       try {
         this.plugin.hamasxiangOperations.runPublish();
@@ -1652,8 +1746,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     const isPreviewRunning = this.plugin.processRegistry.isRunning("preview");
     const previewToggleBtn = previewGrid.createEl("button", {
-      cls: `aos-btn ${isPreviewRunning ? "is-danger" : ""}`,
-      text: isPreviewRunning ? "⏹️ 关闭预览服务" : "▶️ 开启本地预览"
+      cls: `aos-btn aos-preview-action ${isPreviewRunning ? "is-danger" : ""}`,
+      text: isPreviewRunning ? "关闭本地预览" : "开启本地预览"
     });
     if (isPreviewRunning) {
       previewToggleBtn.style.cssText = "background: rgba(239, 68, 68, 0.1) !important; border: 1px solid rgba(239, 68, 68, 0.4) !important; color: #ef4444 !important;";
@@ -1668,16 +1762,16 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     });
 
     // Right Panel 1: Git 安全归档备份
-    const gitPanel = rightPane.createDiv({ cls: "aos-panel" });
-    gitPanel.createDiv({ cls: "aos-panel-title", text: "🛡️ Git 安全归档备份" });
+    const gitPanel = rightPane.createDiv({ cls: "aos-panel aos-git-backup-panel" });
+    gitPanel.createDiv({ cls: "aos-panel-title", text: "Git 安全归档备份" });
     gitPanel.createDiv({ cls: "aos-panel-note", text: "扫描仓库变更，预防敏感密钥泄漏，执行二次确认安全提交与备份" });
+    gitPanel.createDiv({ cls: "aos-git-flow-note", text: "先扫描工作区；确认无敏感项后再本地提交。远端同步独立执行，不会替代本地备份。" });
 
-    const gitActionsRow = gitPanel.createDiv();
-    gitActionsRow.style.cssText = "display: flex; gap: 8px; margin-top: 10px; margin-bottom: 12px;";
+    const gitActionsRow = gitPanel.createDiv({ cls: "aos-git-action-row" });
 
     const scanBtn = gitActionsRow.createEl("button", {
-      cls: `aos-btn ${this.isScanningGit ? "is-loading" : ""}`,
-      text: this.isScanningGit ? "🔍 扫描中..." : "🔍 扫描工作区变更"
+      cls: `aos-btn aos-git-action aos-git-scan ${this.isScanningGit ? "is-loading" : ""}`,
+      text: this.isScanningGit ? "正在扫描…" : "扫描工作区"
     });
     scanBtn.addEventListener("click", async () => {
       this.isScanningGit = true;
@@ -1697,8 +1791,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     const isRunningGit = this.plugin.processRegistry.isRunning("git");
     const remoteSyncBtn = gitActionsRow.createEl("button", {
-      cls: "aos-btn",
-      text: "🔱 远端同步 (Pull & Push)"
+      cls: "aos-btn aos-git-action aos-git-remote",
+      text: "同步远端"
     });
     if (isRunningGit) remoteSyncBtn.setAttribute("disabled", "true");
     remoteSyncBtn.addEventListener("click", async () => {
@@ -1772,10 +1866,9 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         ackLabel.createSpan({ text: "我已确认待暂存的变更不含任何敏感密钥/测试垃圾，且当前网络状态健康。" });
 
         const backupBtn = gitPanel.createEl("button", {
-          cls: "aos-btn",
-          text: "🚀 启动 Git 备份并本地提交"
+          cls: "aos-btn aos-git-backup-action",
+          text: "确认后创建本地备份提交"
         });
-        backupBtn.style.cssText = "width: 100%; padding: 8px; font-weight: bold; background: rgba(40, 88, 58, 0.1) !important; border: 1px solid rgba(40, 88, 58, 0.4) !important; color: #28583a !important;";
         backupBtn.toggle(this.gitAcknowledgement && !isRunningGit);
 
         ackCheck.addEventListener("change", () => {
@@ -2282,6 +2375,18 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
   private renderIntelligence(): void {
     const snapshot = this.plugin.hamasxiangAdapter.getSnapshot();
     const items = this.plugin.hamasxiangAdapter.getIntelligence();
+    const orderedItems = [...items].sort((a, b) => {
+      const attentionDelta = Number(b.shouldNotify) - Number(a.shouldNotify);
+      if (attentionDelta) return attentionDelta;
+      const relevanceDelta = Number(b.relevant) - Number(a.relevant);
+      if (relevanceDelta) return relevanceDelta;
+      return b.capturedAt - a.capturedAt;
+    });
+    const visibleItems = orderedItems.filter(item => {
+      if (this.intelligenceFilter === "attention") return item.shouldNotify;
+      if (this.intelligenceFilter === "relevant") return item.relevant;
+      return true;
+    });
     const page = this.mainPane.createDiv({ cls: "aos-page aos-intelligence-page" });
     const heading = page.createDiv({ cls: "aos-page-heading" });
     heading.createDiv({ cls: "aos-page-title", text: "情报 Intelligence" });
@@ -2298,9 +2403,35 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     this.actionButton(actions, "立即巡逻 X", () => void this.runXWatch());
     this.actionButton(actions, "打开蛤蟆祥指挥中心", () => void this.plugin.openHamasxiangConsole());
 
+    const filters = page.createDiv({ cls: "aos-intelligence-filters" });
+    filters.createSpan({ cls: "aos-filter-label", text: "查看范围" });
+    const addFilter = (filter: "attention" | "relevant" | "all", label: string, count: number) => {
+      const button = filters.createEl("button", {
+        cls: "aos-intelligence-filter",
+        text: `${label} ${count}`,
+        attr: { type: "button", "aria-pressed": String(this.intelligenceFilter === filter) }
+      });
+      button.classList.toggle("is-active", this.intelligenceFilter === filter);
+      button.addEventListener("click", () => {
+        this.intelligenceFilter = filter;
+        this.renderIntelligence();
+      });
+    };
+    addFilter("attention", "需处理", items.filter(item => item.shouldNotify).length);
+    addFilter("relevant", "高相关", items.filter(item => item.relevant).length);
+    addFilter("all", "全部", items.length);
+
     const panel = page.createDiv({ cls: "aos-panel" });
     panel.createDiv({ cls: "aos-panel-title", text: "最近分类结果" });
-    this.renderIntelligenceList(panel, items);
+    panel.createDiv({
+      cls: "aos-panel-note aos-intelligence-evidence-note",
+      text: "“需处理”由 Daemon 的 should_notify 标记；“高相关”是分类器相关性判断。信号等级与置信度用于排序参考，不等同于事实确认；请通过原文或已入库卷宗复核。"
+    });
+    if (visibleItems.length === 0 && items.length > 0) {
+      panel.createDiv({ cls: "aos-empty-state", text: "当前查看范围没有匹配条目；可切换到“高相关”或“全部”查看。" });
+    } else {
+      this.renderIntelligenceList(panel, visibleItems);
+    }
   }
 
   private renderKnowledgeGraph(): void {
@@ -3065,7 +3196,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       const needle = value.slice(1).trim().toLocaleLowerCase("zh-CN");
       this.showCommandItems(this.plugin.settings.workspaces
         .filter(workspace => !needle || workspace.name.toLocaleLowerCase("zh-CN").includes(needle))
-        .map(workspace => ({ primary: `${workspace.icon ?? "◇"} ${workspace.name}`, secondary: "切换工作域", action: () => this.selectWorkspace(workspace.id) })));
+        .map(workspace => ({ primary: `${this.getWorkspaceEmoji(workspace.icon)} ${workspace.name}`, secondary: "切换工作域", action: () => this.selectWorkspace(workspace.id) })));
       return;
     }
     if (value.startsWith("@")) {
@@ -3243,17 +3374,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       return;
     }
 
-    const workspaceContainer = this.app.workspace.containerEl;
-    const mask = workspaceContainer.createDiv({ cls: "aos-page-transition-mask" });
-    mask.createDiv({ cls: "aos-spinner" });
-
-    const finishTransition = () => {
-      window.setTimeout(() => {
-        mask.style.opacity = "0";
-        mask.style.pointerEvents = "none";
-        window.setTimeout(() => mask.remove(), 250);
-      }, 180);
-    };
+    const transitionToken = this.plugin.layoutCoordinator.beginDocumentOpen();
 
     // 1. If the file is already open in any workspace tab, switch to it immediately
     let existingLeaf: any = null;
@@ -3265,9 +3386,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     if (existingLeaf) {
       this.app.workspace.setActiveLeaf(existingLeaf, { focus: true });
-      this.app.workspace.rightSplit.expand();
       this.plugin.logBus.append("success", "workspace.open", `已切换 to 已有标签页：${node.path}`);
-      finishTransition();
+      this.plugin.layoutCoordinator.completeDocumentOpen(transitionToken);
       return;
     }
 
@@ -3277,14 +3397,14 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     // 3. Switch to the target tab first for instant visual feedback and UI restoration
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
 
-    // 4. Expand the outline sidebar panel concurrently while the file loads
-    this.app.workspace.rightSplit.expand();
-
-    // 5. Load the file content in the active tab
-    await leaf.openFile(file);
-
-    this.plugin.logBus.append("success", "workspace.open", `已在原生编辑器和右侧大纲栏打开：${node.path}`);
-    finishTransition();
+    // 4. Load the file content while LayoutCoordinator keeps the transition
+    // mask and warm right sidebar under one transaction.
+    try {
+      await leaf.openFile(file);
+      this.plugin.logBus.append("success", "workspace.open", `已在原生编辑器和右侧大纲栏打开：${node.path}`);
+    } finally {
+      this.plugin.layoutCoordinator.completeDocumentOpen(transitionToken);
+    }
   }
 
   private toggleFavorite(path: string): void {
@@ -3412,6 +3532,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     for (const item of items) {
       const row = list.createDiv({ cls: "aos-task-row aos-intelligence-row" });
       if (item.relevant) row.addClass("is-relevant");
+      if (item.shouldNotify) row.addClass("is-attention");
       const dot = row.createSpan({ cls: "aos-status-dot" });
       if (!item.relevant) dot.addClass("is-idle");
       else if (item.shouldNotify) dot.addClass("is-running");
@@ -3421,7 +3542,10 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       titleRow.createSpan({ cls: "aos-task-title", text: item.title });
 
       if (item.relevant) {
-        titleRow.createSpan({ cls: "aos-core-badge", text: "★ 核心信号" });
+        titleRow.createSpan({ cls: "aos-core-badge", text: "高相关" });
+      }
+      if (item.shouldNotify) {
+        titleRow.createSpan({ cls: "aos-attention-badge", text: "需处理" });
       }
 
       const detailContainer = primary.createDiv({ cls: "aos-task-detail-container" });
@@ -3441,10 +3565,16 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         });
       }
 
-      if (item.url) {
+      if (item.resultPath || item.url) {
         const actions = row.createDiv({ cls: "aos-task-actions" });
-        const button = actions.createEl("button", { cls: "aos-task-action-btn", text: "查看原文 ↗" });
-        button.addEventListener("click", () => window.open(item.url, "_blank", "noopener"));
+        if (item.resultPath) {
+          const resultButton = actions.createEl("button", { cls: "aos-task-action-btn", text: "打开卷宗" });
+          resultButton.addEventListener("click", () => this.openFileByPath(item.resultPath!));
+        }
+        if (item.url) {
+          const sourceButton = actions.createEl("button", { cls: "aos-task-action-btn", text: "查看原文" });
+          sourceButton.addEventListener("click", () => window.open(item.url, "_blank", "noopener"));
+        }
       }
     }
   }
@@ -3713,7 +3843,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       const completedChar = !item.completed ? "x" : " ";
       lines[item.index] = lines[item.index].replace(/-\s*\[([ xX])\]/, `- [${completedChar}]`);
       await this.app.vault.modify(file, lines.join("\n"));
-      this.renderOverview();
+      this.refreshLifeDashboard();
     }
   }
 
@@ -3725,7 +3855,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const separator = content.endsWith("\n") ? "" : "\n";
     const updated = content + `${separator}- [ ] ${text.trim()}\n`;
     await this.app.vault.modify(file, updated);
-    this.renderOverview();
+    this.refreshLifeDashboard();
   }
 
   private async addInspiration(text: string): Promise<void> {
@@ -3738,7 +3868,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const updated = content + `${separator}*   *${todayStr}*：${text.trim()}\n`;
     await this.app.vault.modify(file, updated);
     new Notice("💡 灵感已成功记入密室灵感池！");
-    this.renderOverview();
+    this.refreshLifeDashboard();
   }
 
   private async loadThreeFocusItems(): Promise<Array<{ completed: boolean; text: string }>> {
@@ -3801,11 +3931,20 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
   private renderLifeDashboard(parent: HTMLElement): void {
     const grid = parent.createDiv({ cls: "aos-life-grid" });
-    const statusCard = grid.createDiv({ cls: "aos-panel aos-life-status-card" });
-    const todoCard = grid.createDiv({ cls: "aos-panel aos-life-todo-card" });
+    const statusCard = grid.createDiv({ cls: "aos-panel aos-life-status-card is-loading" });
+    const todoCard = grid.createDiv({ cls: "aos-panel aos-life-todo-card is-loading" });
 
     statusCard.createDiv({ cls: "aos-spinner-small" });
     todoCard.createDiv({ cls: "aos-spinner-small" });
+
+    this.lifeDashboard = { statusCard, todoCard };
+    this.refreshLifeDashboard();
+  }
+
+  private refreshLifeDashboard(): void {
+    const dashboard = this.lifeDashboard;
+    if (!dashboard || !dashboard.statusCard.isConnected || !dashboard.todoCard.isConnected) return;
+    const tx = ++this.lifeRefreshTx;
 
     Promise.all([
       this.fetchWeather(),
@@ -3813,20 +3952,80 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       this.getRandomFoodChoice(),
       this.loadTodoItems()
     ]).then(([weather, focusItems, foodChoice, todos]) => {
-      this.populateLifeStatus(statusCard, weather, focusItems, foodChoice);
-      this.populateLifeTodo(todoCard, todos);
+      if (tx !== this.lifeRefreshTx || !dashboard.statusCard.isConnected || !dashboard.todoCard.isConnected) return;
+      this.populateLifeStatus(dashboard.statusCard, weather, focusItems, foodChoice);
+      this.populateLifeTodo(dashboard.todoCard, todos);
     }).catch(err => {
+      if (tx !== this.lifeRefreshTx || !dashboard.statusCard.isConnected || !dashboard.todoCard.isConnected) return;
       console.error("Failed to load life dashboard data", err);
-      statusCard.empty();
-      statusCard.createDiv({ text: "生活数据加载失败", cls: "aos-panel-note" });
-      todoCard.empty();
-      todoCard.createDiv({ text: "待办数据加载失败", cls: "aos-panel-note" });
+      dashboard.statusCard.classList.remove("is-loading");
+      dashboard.statusCard.empty();
+      dashboard.statusCard.createDiv({ text: "生活数据加载失败", cls: "aos-panel-note" });
+      dashboard.todoCard.classList.remove("is-loading");
+      dashboard.todoCard.empty();
+      dashboard.todoCard.createDiv({ text: "待办数据加载失败", cls: "aos-panel-note" });
     });
   }
 
+  private localizeWeatherDescription(description: string): string {
+    const normalized = description.trim().toLowerCase();
+    const mappings: Array<[RegExp, string]> = [
+      [/patchy rain|light rain|drizzle|rain shower/, "零星阵雨"],
+      [/heavy rain|torrential rain|thunder/, "强降雨"],
+      [/clear|sunny/, "晴朗"],
+      [/partly cloudy/, "多云间晴"],
+      [/overcast/, "阴天"],
+      [/cloudy|mist|fog/, "多云"],
+      [/snow|sleet|ice/, "雨雪天气"]
+    ];
+    return mappings.find(([pattern]) => pattern.test(normalized))?.[1] ?? description;
+  }
+
+  private buildWeatherGuidance(weather: any): string[] {
+    const current = weather?.current_condition?.[0] ?? {};
+    const today = weather?.weather?.[0] ?? {};
+    const hourly = Array.isArray(today.hourly) ? today.hourly : [];
+    const maxRainChance = hourly.reduce((max: number, hour: any) => {
+      const value = Number(hour?.chanceofrain ?? 0);
+      return Number.isFinite(value) ? Math.max(max, value) : max;
+    }, 0);
+    const feels = Number(current.FeelsLikeC ?? current.temp_C);
+    const humidity = Number(current.humidity);
+    const wind = Number(current.windspeedKmph);
+    const uv = Number(current.uvIndex ?? today.uvIndex);
+    const description = String(current.weatherDesc?.[0]?.value ?? "").toLowerCase();
+    const guidance: string[] = [];
+
+    if (maxRainChance >= 50 || /rain|shower|drizzle|thunder/.test(description)) {
+      guidance.push(`带伞出门，今日降雨概率最高约 ${maxRainChance || "较高"}%`);
+    }
+    if (Number.isFinite(feels) && feels >= 35) {
+      guidance.push(`体感 ${feels}°C，少在正午久晒，记得补水`);
+    } else if (Number.isFinite(feels) && feels <= 10) {
+      guidance.push(`体感 ${feels}°C，外出添一件防风外套`);
+    }
+    if (Number.isFinite(uv) && uv >= 6) {
+      guidance.push(`紫外线 ${uv} 级，长时间外出建议遮阳防晒`);
+    }
+    if (Number.isFinite(wind) && wind >= 25) {
+      guidance.push(`风速约 ${wind} km/h，骑行留意侧风`);
+    }
+    if (guidance.length === 0 && Number.isFinite(humidity) && humidity >= 80) {
+      guidance.push(`湿度 ${humidity}%，体感偏闷，室内注意通风`);
+    }
+    if (guidance.length === 0) {
+      guidance.push("天气整体平稳，适合安排短途散步或通勤");
+    }
+    return guidance.slice(0, 2);
+  }
+
   private populateLifeStatus(card: HTMLDivElement, weather: any, focusItems: Array<{ completed: boolean; text: string }>, foodChoice: string): void {
+    card.classList.remove("is-loading");
     card.empty();
-    card.createDiv({ cls: "aos-panel-title", text: "🏡 林下今日状态" });
+    const statusTitle = card.createDiv({ cls: "aos-panel-title aos-life-icon-title" });
+    const statusTitleIcon = statusTitle.createSpan({ cls: "aos-life-title-icon" });
+    setIcon(statusTitleIcon, "house");
+    statusTitle.createSpan({ text: "林下今日状态" });
 
     const dateObj = new Date();
     const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
@@ -3836,23 +4035,26 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const yearStr = String(dateObj.getFullYear());
 
     const dateRow = card.createDiv({ cls: "aos-life-date-row" });
-    const calendar = dateRow.createDiv({ cls: "aos-life-calendar-icon" });
-    calendar.createDiv({ cls: "month-tab", text: `${month}月` });
-    calendar.createDiv({ cls: "day-num", text: dateNum });
+    dateRow.createDiv({ cls: "aos-life-date-number", text: dateNum });
 
     const dateText = dateRow.createDiv({ cls: "aos-life-date-text" });
+    dateText.createDiv({ cls: "month-year", text: `${month}月 · ${yearStr}` });
     dateText.createDiv({ cls: "weekday", text: weekdayStr });
-    dateText.createDiv({ cls: "full-date", text: `${yearStr}年${month}月${dateNum}日` });
 
     // Weather widget
     if (weather && weather.current_condition && weather.current_condition[0]) {
       const current = weather.current_condition[0];
       const temp = current.temp_C || "--";
-      const desc = current.weatherDesc?.[0]?.value || "未知天气";
+      const rawDescription = current.weatherDesc?.[0]?.value || "未知天气";
+      const desc = this.localizeWeatherDescription(rawDescription);
       const feels = current.FeelsLikeC || "--";
       const humidity = current.humidity || "--";
+      const wind = current.windspeedKmph || "--";
+      const todayHourly = weather.weather?.[0]?.hourly ?? [];
+      const rainChance = todayHourly.reduce((max: number, hour: any) => Math.max(max, Number(hour?.chanceofrain ?? 0)), 0);
+      const uv = current.uvIndex ?? weather.weather?.[0]?.uvIndex ?? "--";
 
-      const descLower = desc.toLowerCase();
+      const descLower = rawDescription.toLowerCase();
       let weatherClass = "is-cloudy";
       if (descLower.includes("sun") || descLower.includes("clear")) {
         weatherClass = "is-sunny";
@@ -3864,9 +4066,22 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
       const weatherWidget = card.createDiv({ cls: `aos-weather-widget ${weatherClass}` });
       const currentEl = weatherWidget.createDiv({ cls: "aos-weather-current" });
-      currentEl.createDiv({ cls: "temp-val", text: `${temp}°C` });
-      currentEl.createDiv({ cls: "desc-val", text: `${desc} (体感 ${feels}°C)` });
-      currentEl.createDiv({ cls: "details-val", text: `湿度 ${humidity}%` });
+      const weatherSymbol = currentEl.createSpan({ cls: "weather-symbol" });
+      setIcon(weatherSymbol, weatherClass === "is-sunny" ? "sun" : weatherClass === "is-rainy" ? "cloud-rain" : weatherClass === "is-snowy" ? "snowflake" : "cloud");
+      const temperatureBlock = currentEl.createDiv({ cls: "temperature-block" });
+      temperatureBlock.createDiv({ cls: "temp-val", text: `${temp}°` });
+      temperatureBlock.createDiv({ cls: "desc-val", text: desc });
+
+      const detailsEl = weatherWidget.createDiv({ cls: "aos-weather-details" });
+      detailsEl.createSpan({ text: `体感 ${feels}°` });
+      detailsEl.createSpan({ text: `湿度 ${humidity}%` });
+      detailsEl.createSpan({ text: `风 ${wind} km/h` });
+      detailsEl.createSpan({ text: `降雨 ${rainChance}%` });
+      detailsEl.createSpan({ text: `UV ${uv}` });
+
+      const adviceEl = weatherWidget.createDiv({ cls: "aos-weather-advice" });
+      adviceEl.createSpan({ cls: "advice-label", text: "今日提醒" });
+      adviceEl.createSpan({ cls: "advice-text", text: this.buildWeatherGuidance(weather).join(" · ") });
 
       const forecastEl = weatherWidget.createDiv({ cls: "aos-weather-forecast" });
       const forecastDays = weather.weather || [];
@@ -3880,13 +4095,16 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     }
 
     // Today's Focus
-    card.createDiv({ cls: "aos-life-sub-title", text: "🎯 今日三件事" });
+    const focusTitle = card.createDiv({ cls: "aos-life-sub-title aos-life-icon-title" });
+    const focusTitleIcon = focusTitle.createSpan({ cls: "aos-life-title-icon" });
+    setIcon(focusTitleIcon, "target");
+    focusTitle.createSpan({ text: "今日三件事" });
     const focusContainer = card.createDiv({ cls: "aos-life-focus-list" });
     focusItems.forEach((item, index) => {
       const itemEl = focusContainer.createDiv({ cls: "aos-life-focus-item" });
       if (!item.text) {
         itemEl.classList.add("is-empty");
-        itemEl.textContent = `🎯 设定第 ${index + 1} 件今日要事...`;
+        itemEl.textContent = `0${index + 1}  ·  设定一件今日要事`;
       } else {
         itemEl.textContent = `${item.completed ? "✅" : "⏳"} ${item.text}`;
       }
@@ -3926,15 +4144,38 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
   }
 
   private populateLifeTodo(card: HTMLDivElement, todos: any[]): void {
+    card.classList.remove("is-loading");
     card.empty();
-    card.createDiv({ cls: "aos-panel-title", text: "🌲 密室今日小目标" });
+    const heading = card.createDiv({ cls: "aos-life-todo-heading" });
+    const todoTitle = heading.createDiv({ cls: "aos-panel-title aos-life-icon-title" });
+    const todoTitleIcon = todoTitle.createSpan({ cls: "aos-life-title-icon" });
+    setIcon(todoTitleIcon, "list-checks");
+    todoTitle.createSpan({ text: "密室今日小目标" });
+
+    let completedCount = todos.filter(todo => todo.completed).length;
+    const progressText = heading.createDiv({
+      cls: "aos-life-todo-progress-text",
+      text: todos.length > 0 ? `${completedCount} / ${todos.length} 已完成` : "今日尚未开张"
+    });
+    const progressTrack = card.createDiv({ cls: "aos-life-todo-progress-track" });
+    const progressBar = progressTrack.createDiv({ cls: "aos-life-todo-progress-bar" });
+
+    const updateProgress = (): void => {
+      const percent = todos.length > 0 ? Math.round((completedCount / todos.length) * 100) : 0;
+      progressText.textContent = todos.length > 0 ? `${completedCount} / ${todos.length} 已完成` : "今日尚未开张";
+      progressBar.style.width = `${percent}%`;
+      progressTrack.setAttribute("aria-label", `今日小目标完成度 ${percent}%`);
+    };
+    updateProgress();
 
     const listContainer = card.createDiv({ cls: "aos-life-todo-list" });
     if (todos.length === 0) {
       listContainer.createDiv({ cls: "aos-empty-state", text: "今日暂无目标，在下方极速记录一个吧！" });
     } else {
-      for (const todo of todos) {
+      const orderedTodos = [...todos].sort((a, b) => Number(a.completed) - Number(b.completed));
+      for (const todo of orderedTodos) {
         const row = listContainer.createDiv({ cls: "aos-life-todo-row" });
+        row.classList.toggle("is-completed", todo.completed);
         const cb = row.createEl("input", { attr: { type: "checkbox" }, cls: "aos-life-todo-cb" });
         cb.checked = todo.completed;
 
@@ -3942,8 +4183,20 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         if (todo.completed) label.classList.add("is-completed");
 
         cb.addEventListener("change", async () => {
+          const wasCompleted = Boolean(todo.completed);
+          todo.completed = cb.checked;
+          completedCount += cb.checked && !wasCompleted ? 1 : !cb.checked && wasCompleted ? -1 : 0;
           label.classList.toggle("is-completed", cb.checked);
-          await this.toggleTodoItem(todo);
+          row.classList.toggle("is-completed", cb.checked);
+          updateProgress();
+
+          if (cb.checked) {
+            listContainer.appendChild(row);
+          } else {
+            const firstCompleted = listContainer.querySelector(".aos-life-todo-row.is-completed");
+            listContainer.insertBefore(row, firstCompleted);
+          }
+          await this.toggleTodoItem({ ...todo, completed: wasCompleted });
         });
       }
     }

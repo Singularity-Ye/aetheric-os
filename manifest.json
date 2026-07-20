@@ -1,7 +1,7 @@
 {
   "id": "obsidian-scriptorium",
   "name": "松果天工台 · Aetheric OS",
-  "version": "1.3.1",
+  "version": "1.3.5",
   "minAppVersion": "1.0.0",
   "description": "松果天工台常驻工作壳：工作域导航、知识节点上下文、Agent 调度入口与统一实时日志。",
   "author": "Antigravity & Yhx06",

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-scriptorium",
-  "version": "1.3.1",
+  "version": "1.3.5",
   "description": "松果天工台 Aetheric OS - Obsidian workspace shell and knowledge operations console",
   "main": "main.js",
   "scripts": {

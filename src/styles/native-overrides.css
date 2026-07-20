@@ -3,12 +3,24 @@
  * Removing body.aetheric-os-shell-active restores the stock Obsidian chrome.
  */
 body.aetheric-os-shell-active .workspace-ribbon,
-body.aetheric-os-shell-active .workspace-split.mod-left-split,
-body.aetheric-os-shell-active .workspace-split.mod-right-split,
 body.aetheric-os-shell-active .sidebar-toggle-button.mod-left,
 body.aetheric-os-shell-active .sidebar-toggle-button.mod-right,
 body.aetheric-os-shell-active .status-bar {
   display: none !important;
+}
+
+/* Keep sidebars mounted (Claudian, outline and file tree retain their state),
+ * while removing them from the shell's visible layout. */
+body.aetheric-os-shell-active .workspace-split.mod-left-split,
+body.aetheric-os-shell-active .workspace-split.mod-right-split {
+  display: flex !important;
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  visibility: hidden;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container {
@@ -23,5 +35,14 @@ body.aetheric-os-shell-active .workspace-leaf-content[data-type="aetheric-os-she
 @media (max-width: 700px) {
   body.aetheric-os-shell-active .workspace-ribbon { display: flex !important; }
   body.aetheric-os-shell-active .workspace-split.mod-left-split,
-  body.aetheric-os-shell-active .workspace-split.mod-right-split { display: flex !important; }
+  body.aetheric-os-shell-active .workspace-split.mod-right-split {
+    display: flex !important;
+    flex: revert !important;
+    width: revert !important;
+    min-width: revert !important;
+    opacity: 1;
+    visibility: visible;
+    overflow: visible;
+    pointer-events: auto;
+  }
 }

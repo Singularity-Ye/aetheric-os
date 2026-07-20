@@ -1,5 +1,6 @@
 node_modules/
 _baseline/
+scratch/
 
 .env
 .env.*
@@ -15,4 +16,3 @@ data.json
 Thumbs.db
 .idea/
 .vscode/
-

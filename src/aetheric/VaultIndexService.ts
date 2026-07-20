@@ -21,8 +21,12 @@ type IndexListener = () => void;
 export class VaultIndexService {
   private filesByPath = new Map<string, IndexedFile>();
   private foldersByPath = new Map<string, TFolder>();
+  private outgoingBySource = new Map<string, string[]>();
+  private backlinksByTarget = new Map<string, Set<string>>();
+  private unresolvedCounts = new Map<string, number>();
   private listeners = new Set<IndexListener>();
   private ready = false;
+  private emitFrame: number | null = null;
 
   constructor(private app: App, private plugin: Plugin) {}
 
@@ -33,9 +37,12 @@ export class VaultIndexService {
     this.plugin.registerEvent(this.app.vault.on("rename", (file, oldPath) => this.handleRename(file, oldPath)));
     this.plugin.registerEvent(this.app.metadataCache.on("changed", file => {
       this.indexFile(file);
-      this.emit();
+      this.scheduleEmit();
     }));
-    this.plugin.registerEvent(this.app.metadataCache.on("resolved", () => this.emit()));
+    this.plugin.registerEvent(this.app.metadataCache.on("resolved", () => {
+      this.rebuildRelationIndex();
+      this.scheduleEmit();
+    }));
   }
 
   async build(): Promise<void> {
@@ -45,6 +52,7 @@ export class VaultIndexService {
       if (abstractFile instanceof TFolder) this.foldersByPath.set(abstractFile.path, abstractFile);
       if (abstractFile instanceof TFile) this.indexFile(abstractFile);
     }
+    this.rebuildRelationIndex();
     this.ready = true;
     this.emit();
   }
@@ -177,16 +185,10 @@ export class VaultIndexService {
 
   getRelationCounts(path: string): { outgoing: number; backlinks: number; unresolved: number } {
     const normalized = normalizePath(path);
-    const outgoingMap = this.app.metadataCache.resolvedLinks[normalized] ?? {};
-    const unresolvedMap = this.app.metadataCache.unresolvedLinks[normalized] ?? {};
-    let backlinks = 0;
-    for (const targets of Object.values(this.app.metadataCache.resolvedLinks)) {
-      if (targets[normalized]) backlinks += 1;
-    }
     return {
-      outgoing: Object.keys(outgoingMap).length,
-      backlinks,
-      unresolved: Object.keys(unresolvedMap).length,
+      outgoing: this.outgoingBySource.get(normalized)?.length ?? 0,
+      backlinks: this.backlinksByTarget.get(normalized)?.size ?? 0,
+      unresolved: this.unresolvedCounts.get(normalized) ?? 0,
     };
   }
 
@@ -257,11 +259,37 @@ export class VaultIndexService {
 
   private getRelatedPaths(path: string): string[] {
     const normalized = normalizePath(path);
-    const related = new Set(Object.keys(this.app.metadataCache.resolvedLinks[normalized] ?? {}));
-    for (const [source, targets] of Object.entries(this.app.metadataCache.resolvedLinks)) {
-      if (targets[normalized]) related.add(source);
-    }
+    const related = new Set(this.outgoingBySource.get(normalized) ?? []);
+    for (const source of this.backlinksByTarget.get(normalized) ?? []) related.add(source);
     return [...related];
+  }
+
+  private rebuildRelationIndex(): void {
+    const outgoingBySource = new Map<string, string[]>();
+    const backlinksByTarget = new Map<string, Set<string>>();
+    const unresolvedCounts = new Map<string, number>();
+
+    for (const [source, targets] of Object.entries(this.app.metadataCache.resolvedLinks)) {
+      const normalizedSource = normalizePath(source);
+      const targetPaths = Object.keys(targets).map(target => normalizePath(target));
+      outgoingBySource.set(normalizedSource, targetPaths);
+      for (const target of targetPaths) {
+        let backlinks = backlinksByTarget.get(target);
+        if (!backlinks) {
+          backlinks = new Set<string>();
+          backlinksByTarget.set(target, backlinks);
+        }
+        backlinks.add(normalizedSource);
+      }
+    }
+
+    for (const [source, targets] of Object.entries(this.app.metadataCache.unresolvedLinks)) {
+      unresolvedCounts.set(normalizePath(source), Object.keys(targets).length);
+    }
+
+    this.outgoingBySource = outgoingBySource;
+    this.backlinksByTarget = backlinksByTarget;
+    this.unresolvedCounts = unresolvedCounts;
   }
 
   private indexFile(file: TFile): void {
@@ -320,13 +348,13 @@ export class VaultIndexService {
   private handleCreate(file: TAbstractFile): void {
     if (file instanceof TFolder) this.foldersByPath.set(file.path, file);
     if (file instanceof TFile) this.indexFile(file);
-    this.emit();
+    this.scheduleEmit();
   }
 
   private handleModify(file: TAbstractFile): void {
     if (!(file instanceof TFile)) return;
     this.indexFile(file);
-    this.emit();
+    this.scheduleEmit();
   }
 
   private handleDelete(file: TAbstractFile): void {
@@ -335,7 +363,7 @@ export class VaultIndexService {
       for (const path of [...this.filesByPath.keys()]) if (this.isWithin(path, file.path)) this.filesByPath.delete(path);
     }
     if (file instanceof TFile) this.filesByPath.delete(file.path);
-    this.emit();
+    this.scheduleEmit();
   }
 
   private handleRename(file: TAbstractFile, oldPath: string): void {
@@ -352,7 +380,7 @@ export class VaultIndexService {
         if (abstractFile instanceof TFile && this.isWithin(abstractFile.path, file.path)) this.indexFile(abstractFile);
       }
     }
-    this.emit();
+    this.scheduleEmit();
   }
 
   private isWithin(path: string, root: string): boolean {
@@ -361,5 +389,13 @@ export class VaultIndexService {
 
   private emit(): void {
     for (const listener of this.listeners) listener();
+  }
+
+  private scheduleEmit(): void {
+    if (this.emitFrame !== null) return;
+    this.emitFrame = window.requestAnimationFrame(() => {
+      this.emitFrame = null;
+      this.emit();
+    });
   }
 }
