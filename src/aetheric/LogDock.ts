@@ -71,12 +71,20 @@ export class LogDock {
     this.unsubscribe = bus.subscribe((entries, latest) => {
       const shouldFollow = this.follow || this.isNearBottom();
       this.entries = entries;
-      this.render();
-      if (latest && shouldFollow) requestAnimationFrame(() => this.scrollToBottom(false));
+      const open = this.options.getState().logDock.open;
+      if (open) {
+        if (latest) this.appendEntry(latest);
+        else this.render();
+      }
+      if (latest && open && shouldFollow) requestAnimationFrame(() => this.scrollToBottom(false));
       if (latest && !shouldFollow) {
         this.follow = false;
         this.unseen += 1;
         this.persistFollowState();
+      } else if (!open) {
+        // A collapsed dock is a status strip, not a hidden 500-row terminal.
+        // Keep the data snapshot and controls current without touching the DOM.
+        this.updateControls();
       }
     });
   }
@@ -88,23 +96,44 @@ export class LogDock {
   }
 
   private render(): void {
+    if (!this.options.getState().logDock.open) {
+      this.updateControls();
+      return;
+    }
     const wasNearBottom = this.isNearBottom();
     this.terminal.empty();
-    const filtered = this.entries.filter(entry => {
-      if (this.level !== "all" && entry.level !== this.level) return false;
-      if (!this.search) return true;
-      return `${entry.source} ${entry.message}`.toLocaleLowerCase("zh-CN").includes(this.search);
-    });
-    for (const entry of filtered) {
-      const row = this.terminal.createDiv({ cls: `aos-log-row is-${entry.level}` });
-      row.createSpan({ cls: "aos-log-time", text: new Date(entry.timestamp).toLocaleTimeString("zh-CN", { hour12: false }) });
-      row.createSpan({ cls: "aos-log-level", text: entry.level.toUpperCase() });
-      row.createSpan({ cls: "aos-log-source", text: entry.source });
-      row.createSpan({ cls: "aos-log-message", text: entry.message });
-      if (entry.durationMs !== undefined) row.createSpan({ cls: "aos-log-duration", text: `${entry.durationMs}ms` });
-    }
+    for (const entry of this.entries) if (this.matches(entry)) this.renderEntry(entry);
     if (this.follow && wasNearBottom) requestAnimationFrame(() => this.scrollToBottom(false));
     this.updateControls();
+  }
+
+  private appendEntry(entry: LogEntry): void {
+    if (!this.matches(entry)) return;
+    this.renderEntry(entry);
+    // LogBus keeps at most 500 records. Incremental painting should mirror that
+    // bound instead of rebuilding every existing row for each route click.
+    const oldestId = this.entries[0]?.id ?? entry.id;
+    while (this.terminal.firstElementChild instanceof HTMLElement) {
+      const rowId = Number(this.terminal.firstElementChild.dataset.logId ?? oldestId);
+      if (rowId >= oldestId) break;
+      this.terminal.firstElementChild.remove();
+    }
+  }
+
+  private matches(entry: LogEntry): boolean {
+    if (this.level !== "all" && entry.level !== this.level) return false;
+    if (!this.search) return true;
+    return `${entry.source} ${entry.message}`.toLocaleLowerCase("zh-CN").includes(this.search);
+  }
+
+  private renderEntry(entry: LogEntry): void {
+    const row = this.terminal.createDiv({ cls: `aos-log-row is-${entry.level}` });
+    row.dataset.logId = `${entry.id}`;
+    row.createSpan({ cls: "aos-log-time", text: new Date(entry.timestamp).toLocaleTimeString("zh-CN", { hour12: false }) });
+    row.createSpan({ cls: "aos-log-level", text: entry.level.toUpperCase() });
+    row.createSpan({ cls: "aos-log-source", text: entry.source });
+    row.createSpan({ cls: "aos-log-message", text: entry.message });
+    if (entry.durationMs !== undefined) row.createSpan({ cls: "aos-log-duration", text: `${entry.durationMs}ms` });
   }
 
   private handleScroll(): void {
@@ -146,6 +175,8 @@ export class LogDock {
     this.root.classList.toggle("is-collapsed", !open);
     if (!open && current.maximized) this.root.classList.remove("is-maximized");
     this.options.onStateChange({ open, maximized: open ? current.maximized : false });
+    if (open) this.render();
+    else this.terminal.empty();
     this.updateControls();
     if (open && this.follow) requestAnimationFrame(() => this.scrollToBottom(false));
   }

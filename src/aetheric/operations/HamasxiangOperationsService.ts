@@ -6,6 +6,7 @@ import ScriptoriumPlugin from "../../main";
 import { ProcessRegistry } from "./ProcessRegistry";
 import { ProgressParser, ParsedProgress } from "./ProgressParser";
 import { LogLevel } from "../types";
+import { dedupeCaptureUrls } from "../CaptureUrlUtils";
 
 export interface GitStatusItem {
   status: string;
@@ -59,7 +60,7 @@ export class HamasxiangOperationsService {
     env.DOUYIN_BROWSER_MIN_WAIT_MS = String(5000);
     env.DOUYIN_BROWSER_WAIT_MS = String(60000);
 
-    const proc = spawn(cmd, args, { cwd, env, shell: false });
+    const proc = spawn(cmd, args, { cwd, env, shell: false, windowsHide: true });
 
     // Register process in registry
     this.registry.register(taskType, proc, cmd, args, cwd);
@@ -149,17 +150,18 @@ export class HamasxiangOperationsService {
   /**
    * Run Manual Grab URL
    */
-  runManualGrab(url: string, force = false, onProgress?: OperationProgressCallback): void {
-    if (!url.trim()) {
-      throw new Error("请输入需要参悟的网页链接 (URL)！");
-    }
-    const python = "python";
-    const systemPath = this.plugin.settings.hamasxiangSystemPath;
-    const script = path.join(systemPath, "autocli.py");
-    const args = ["-u", script, url.trim(), "--preview"];
-    if (force) args.push("--force");
-
-    this.runCommand("sync", python, args, systemPath, "网页抓取", onProgress);
+  async runManualGrab(url: string, force = false, onProgress?: OperationProgressCallback): Promise<void> {
+    const urls = dedupeCaptureUrls(url);
+    if (!urls.length) throw new Error("没有识别到有效 HTTPS 页面链接");
+    void onProgress;
+    await this.plugin.hamasxiangAdapter.submitCaptureJob({
+      source_urls: urls,
+      intent: "save",
+      title: "工作台统一采集",
+      force,
+      source: "aetheric-workbench-operations",
+    });
+    this.plugin.logBus.append("info", "工造局.capture-job", "链接已交给统一采集适配器；请在任务快照查看 evidence/stage/Vault 回执。");
   }
 
   /**
@@ -329,7 +331,7 @@ export class HamasxiangOperationsService {
 
     // 3. Scan Git Status Porcelain
     const statusItems = await new Promise<GitStatusItem[]>((resolve, reject) => {
-      const proc = spawn("git", ["status", "--porcelain"], { cwd: vaultPath, shell: false });
+      const proc = spawn("git", ["status", "--porcelain"], { cwd: vaultPath, shell: false, windowsHide: true });
       let output = "";
       let errOutput = "";
       proc.stdout.on("data", (data) => {
@@ -395,7 +397,7 @@ export class HamasxiangOperationsService {
     // 4. Scan staged contents for secrets (git diff --cached)
     try {
       const diffContent = await new Promise<string>((resolve) => {
-        const proc = spawn("git", ["diff", "--cached"], { cwd: vaultPath, shell: false });
+        const proc = spawn("git", ["diff", "--cached"], { cwd: vaultPath, shell: false, windowsHide: true });
         let output = "";
         proc.stdout.on("data", (data) => {
           output += data.toString("utf8");
@@ -427,7 +429,7 @@ export class HamasxiangOperationsService {
 
     if (hasRemote) {
       const remoteRes = await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
-        const p = spawn("git", ["ls-remote", "-h", "origin", "HEAD"], { cwd: vaultPath, shell: false });
+        const p = spawn("git", ["ls-remote", "-h", "origin", "HEAD"], { cwd: vaultPath, shell: false, windowsHide: true });
         const timer = setTimeout(() => {
           p.kill();
           resolve({ ok: false, reason: "远程 origin 仓库连接超时 (4s)" });
@@ -478,7 +480,7 @@ export class HamasxiangOperationsService {
     return new Promise((resolve) => {
       const executeStep = (cmd: string, args: string[], next: () => void, onError: (msg: string) => void) => {
         this.plugin.logBus.append("info", "工造局.git", `   执行指令: ${cmd} ${args.join(" ")}`);
-        const p = spawn(cmd, args, { cwd: vaultPath, shell: false });
+        const p = spawn(cmd, args, { cwd: vaultPath, shell: false, windowsHide: true });
 
         this.registry.register(taskType, p, cmd, args, vaultPath);
 
@@ -532,7 +534,7 @@ export class HamasxiangOperationsService {
           let diffContent = "";
           try {
             diffContent = await new Promise<string>((resolveDiff, rejectDiff) => {
-              const proc = spawn("git", ["diff", "--cached"], { cwd: vaultPath, shell: false });
+              const proc = spawn("git", ["diff", "--cached"], { cwd: vaultPath, shell: false, windowsHide: true });
               let output = "";
               proc.stdout.on("data", (data) => {
                 output += data.toString("utf8");
@@ -556,7 +558,7 @@ export class HamasxiangOperationsService {
             this.plugin.logBus.append("error", "工造局.git", "⚠️ 安全警报：暂存区中疑似包含 API 密钥 (sk-... / gsk_...)！启动回滚法阵...");
 
             // Execute rollback: git reset HEAD -- <files>
-            const rollbackProc = spawn("git", ["reset", "HEAD", "--", ...files], { cwd: vaultPath, shell: false });
+            const rollbackProc = spawn("git", ["reset", "HEAD", "--", ...files], { cwd: vaultPath, shell: false, windowsHide: true });
             rollbackProc.on("close", () => {
               handleFail("检测到敏感凭证泄漏，已撤销暂存，阻止提交！请清理后再试。");
             });
@@ -595,7 +597,7 @@ export class HamasxiangOperationsService {
     return new Promise((resolve) => {
       const executeStep = (cmd: string, args: string[], next: () => void, onError: (msg: string) => void) => {
         this.plugin.logBus.append("info", "工造局.git", `   执行指令: ${cmd} ${args.join(" ")}`);
-        const p = spawn(cmd, args, { cwd: vaultPath, shell: false });
+        const p = spawn(cmd, args, { cwd: vaultPath, shell: false, windowsHide: true });
 
         this.registry.register(taskType, p, cmd, args, vaultPath);
 

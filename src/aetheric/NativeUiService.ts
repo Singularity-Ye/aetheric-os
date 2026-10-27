@@ -5,7 +5,11 @@ export class NativeUiService {
 
   apply(enabled: boolean): void {
     this.enabled = enabled;
-    document.body.classList.toggle(SHELL_CLASS, enabled);
+    // Avoid invalidating the whole Obsidian document when duplicate workspace
+    // events request the layout state that is already applied.
+    if (document.body.classList.contains(SHELL_CLASS) !== enabled) {
+      document.body.classList.toggle(SHELL_CLASS, enabled);
+    }
   }
 
   restore(): void {

@@ -17,10 +17,16 @@ body.aetheric-os-shell-active .workspace-split.mod-right-split {
   flex: 0 0 0 !important;
   width: 0 !important;
   min-width: 0 !important;
+  transition: none !important;
+  animation: none !important;
   opacity: 0;
   visibility: hidden;
   overflow: hidden;
   pointer-events: none;
+  /* Keep plugin state and scroll positions mounted, but let Chromium skip the
+   * expensive paint/layout of both hidden sidebar subtrees. */
+  content-visibility: hidden;
+  contain-intrinsic-size: 0 0;
 }
 
 body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container {
@@ -29,6 +35,59 @@ body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-cont
   transition: opacity .16s ease;
 }
 body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container:hover { opacity: 1; }
+
+/* Obsidian 1.13 uses a frameless/custom titlebar. Its hidden-frameless mode
+ * intentionally leaves the titlebar pass-through and re-enables only native
+ * controls. Do not turn the whole titlebar back into a hit target: the
+ * absolute .titlebar-text would cover the tabs and window controls. */
+body.aetheric-os-shell-active .titlebar-button-container,
+body.aetheric-os-shell-active .titlebar-button,
+body.aetheric-os-shell-active .workspace-tabs.mod-top,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container-inner,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-inner,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-inner-icon,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-inner-title,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-status-icon,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-tab-list,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-new-tab,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-inner-close-button {
+  pointer-events: auto !important;
+}
+body.aetheric-os-shell-active .titlebar-text {
+  pointer-events: none !important;
+}
+body.aetheric-os-shell-active .titlebar-button-container,
+body.aetheric-os-shell-active .titlebar-button {
+  -webkit-app-region: no-drag !important;
+  z-index: 100002 !important;
+}
+/* Chromium can resolve the native hit-test from the deepest painted node.
+ * Obsidian's controls are DIVs whose SVG icons otherwise keep the default
+ * app-region. Mark the icon tree explicitly so the minimize/maximize glyphs
+ * cannot fall back to the surrounding draggable surface on Windows. */
+body.aetheric-os-shell-active .titlebar-button svg,
+body.aetheric-os-shell-active .titlebar-button svg * {
+  pointer-events: auto !important;
+  -webkit-app-region: no-drag !important;
+}
+/* The frameless titlebar treats its remaining surface as draggable. Every
+ * tab hit target must opt out explicitly; pointer-events alone cannot cancel
+ * Electron's drag handling. Keep the titlebar itself draggable in empty space. */
+body.aetheric-os-shell-active .workspace-tabs.mod-top,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-container-inner,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-inner,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-inner-icon,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-inner-title,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-status-icon,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-tab-list,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-new-tab,
+body.aetheric-os-shell-active .workspace-tabs.mod-top .workspace-tab-header-inner-close-button {
+  -webkit-app-region: no-drag !important;
+}
 body.aetheric-os-shell-active .workspace-leaf-content[data-type="aetheric-os-shell-view"] .view-header { display: none; }
 body.aetheric-os-shell-active .workspace-leaf-content[data-type="aetheric-os-shell-view"] .view-content { height: 100%; }
 

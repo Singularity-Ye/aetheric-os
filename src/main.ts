@@ -4,12 +4,19 @@ import { AethericStore } from "./aetheric/AethericStore";
 import { LogBus } from "./aetheric/LogBus";
 import { NativeUiService } from "./aetheric/NativeUiService";
 import { LayoutCoordinator } from "./aetheric/LayoutCoordinator";
+import { PlanLedgerService } from "./aetheric/PlanLedgerService";
+import { CopilotSessionBridge } from "./aetheric/CopilotSessionBridge";
 import { VaultIndexService } from "./aetheric/VaultIndexService";
 import { HamasxiangAdapter } from "./aetheric/HamasxiangAdapter";
 import { CompatAdapter } from "./aetheric/CompatAdapter";
 import { AethericShellState } from "./aetheric/types";
-import { ScriptoriumSettings, DEFAULT_SETTINGS, ScriptoriumSettingTab, mergeSettings } from "./settings";
-import { ScriptoriumDashboardView, SCRIPTORIUM_DASHBOARD_VIEW } from "./views/ScriptoriumDashboardView";
+import {
+  ScriptoriumSettings,
+  DEFAULT_SETTINGS,
+  ScriptoriumSettingTab,
+  mergeSettings,
+  normalizeImageGovernanceHistory,
+} from "./settings";
 import { ChildProcess, spawn, execFile } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
@@ -17,6 +24,8 @@ import { ProcessRegistry } from "./aetheric/operations/ProcessRegistry";
 import { WorkerControlAdapter } from "./aetheric/operations/WorkerControlAdapter";
 import { AnalyticsService } from "./aetheric/operations/AnalyticsService";
 import { HamasxiangOperationsService } from "./aetheric/operations/HamasxiangOperationsService";
+import { NavigationHistoryService } from "./aetheric/NavigationHistoryService";
+import { ImageGovernanceService } from "./aetheric/ImageGovernanceService";
 
 const HAMASXIANG_VIEW = "hamasxiang-console-view";
 
@@ -38,6 +47,9 @@ export default class ScriptoriumPlugin extends Plugin {
   logBus = new LogBus();
   nativeUi = new NativeUiService();
   layoutCoordinator!: LayoutCoordinator;
+  planLedger!: PlanLedgerService;
+  copilotSessionBridge!: CopilotSessionBridge;
+  navigationHistory!: NavigationHistoryService;
   indexService!: VaultIndexService;
   hamasxiangAdapter!: HamasxiangAdapter;
   daemonProcess: ChildProcess | null = null;
@@ -57,6 +69,7 @@ export default class ScriptoriumPlugin extends Plugin {
   workerControl!: WorkerControlAdapter;
   analyticsService!: AnalyticsService;
   hamasxiangOperations!: HamasxiangOperationsService;
+  imageGovernance!: ImageGovernanceService;
 
   private saveTimer: number | null = null;
   private pollTimeout: number | null = null;
@@ -70,10 +83,15 @@ export default class ScriptoriumPlugin extends Plugin {
 
     await this.loadSettings();
     this.layoutCoordinator = new LayoutCoordinator(this.app, this.nativeUi);
+    this.planLedger = new PlanLedgerService(this.app);
+    this.copilotSessionBridge = new CopilotSessionBridge(this.app, this.logBus);
+    this.copilotSessionBridge.start();
     this.store = new AethericStore(this.settings.shellState, state => {
       this.settings.shellState = state;
       this.scheduleSave();
     });
+    this.navigationHistory = new NavigationHistoryService(this.app);
+    this.navigationHistory.start();
     this.indexService = new VaultIndexService(this.app, this);
     this.indexService.start();
 
@@ -87,6 +105,19 @@ export default class ScriptoriumPlugin extends Plugin {
       "http://127.0.0.1:8765",
       this.settings.hamasxiangDaemonToken,
     );
+    this.imageGovernance = new ImageGovernanceService(
+      this.app,
+      this,
+      this.logBus,
+      () => this.settings.imageGovernance,
+      this.hamasxiangAdapter,
+      () => this.settings.imageGovernanceHistory,
+      async history => {
+        this.settings.imageGovernanceHistory = normalizeImageGovernanceHistory(history);
+        await this.saveSettings();
+      },
+    );
+    this.imageGovernance.start();
 
     void this.cleanupExpiredTempFiles();
     void this.startDaemon();
@@ -109,7 +140,6 @@ export default class ScriptoriumPlugin extends Plugin {
 
     this.addSettingTab(new ScriptoriumSettingTab(this.app, this));
     this.registerView(AETHERIC_SHELL_VIEW, leaf => new AethericShellView(leaf, this));
-    this.registerView(SCRIPTORIUM_DASHBOARD_VIEW, leaf => new ScriptoriumDashboardView(leaf, this));
 
     this.addRibbonIcon("sparkles", "松果天工台 · Aetheric OS", () => void this.activateView());
 
@@ -117,11 +147,6 @@ export default class ScriptoriumPlugin extends Plugin {
       id: "open-aetheric-os",
       name: "打开松果天工台 · Aetheric OS",
       callback: () => void this.activateView(),
-    });
-    this.addCommand({
-      id: "open-legacy-scriptorium-dashboard",
-      name: "打开松果阁旧工具",
-      callback: () => void this.openLegacyView(),
     });
     this.addCommand({
       id: "restore-native-obsidian-ui",
@@ -138,6 +163,93 @@ export default class ScriptoriumPlugin extends Plugin {
       name: "重新加载 Obsidian 窗口 (Reload Window)",
       callback: () => {
         CompatAdapter.reloadObsidianWindow(this.app);
+      },
+    });
+    this.addCommand({
+      id: "refresh-plan-ledger-snapshot",
+      name: "Refresh Aetheric plan ledger snapshot",
+      callback: async () => {
+        const snapshot = await this.planLedger.refreshTodaySnapshot();
+        this.logBus.append("success", "plan.ledger", `Plan snapshot refreshed: ${snapshot.items.length} items`);
+        new Notice(`Plan snapshot refreshed: ${snapshot.items.length} items`);
+      },
+    });
+    this.addCommand({
+      id: "image-governance-scan",
+      name: "图片治理：扫描仓库",
+      callback: () => void this.imageGovernance.scanNow(false),
+    });
+    this.addCommand({
+      id: "image-governance-compress",
+      name: "图片治理：打开历史图片候选清单",
+      callback: () => void (async () => {
+        await this.activateView();
+        const leaf = this.app.workspace.getLeavesOfType(AETHERIC_SHELL_VIEW)[0];
+        if (leaf?.view instanceof AethericShellView) leaf.view.showImageGovernanceCandidates();
+      })(),
+    });
+    this.addCommand({
+      id: "image-governance-compress-active-image",
+      name: "图片治理：压缩当前图片（单张）并修复引用",
+      checkCallback: checking => {
+        const file = this.app.workspace.getActiveFile();
+        if (!(file instanceof TFile)
+          || !["png", "jpg", "jpeg"].includes(file.extension.toLowerCase())) return false;
+        if (!checking) {
+          void this.imageGovernance
+            .governSingleImageNow(file.path, { ignoreMinBytes: true })
+            .then(snapshot => {
+              if (snapshot.converted > 0) {
+                new Notice("当前图片已压缩、修复引用并保留原图；云仓登记已提交");
+              } else {
+                new Notice("当前图片未生成 WebP：压缩收益不足或目标路径被占用");
+              }
+            })
+            .catch(error => {
+              const message = error instanceof Error ? error.message : String(error);
+              new Notice(`单图治理失败：${message}`);
+            });
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "image-governance-reconcile-existing",
+      name: "图片治理：补登记已有 WebP（最多 20 对）",
+      callback: () => void this.imageGovernance.reconcileExistingDerivativesNow(20),
+    });
+    this.addCommand({
+      id: "image-governance-register-in-place",
+      name: "图片治理：原位登记当前图片或笔记配图（不转换、不上传）",
+      checkCallback: checking => {
+        const file = this.app.workspace.getActiveFile();
+        if (!(file instanceof TFile) || !["md", "png", "jpg", "jpeg", "webp"].includes(file.extension.toLowerCase())) return false;
+        if (!checking) {
+          void this.imageGovernance.registerFileImagesInPlace(file).then(receipt => {
+            new Notice(`图片原位登记：成功 ${receipt.registered}/${receipt.total}，失败 ${receipt.failed}；详情见日志`);
+          }).catch(error => new Notice(`图片登记失败：${error instanceof Error ? error.message : String(error)}`));
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "aetheric-history-back",
+      name: "Aetheric 历史导航：后退",
+      hotkeys: [{ modifiers: ["Alt"], key: "ArrowLeft" }],
+      checkCallback: checking => {
+        if (!this.navigationHistory?.isNavigationSurfaceActive()) return false;
+        if (!checking) void this.navigationHistory.navigate(-1);
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "aetheric-history-forward",
+      name: "Aetheric 历史导航：前进",
+      hotkeys: [{ modifiers: ["Alt"], key: "ArrowRight" }],
+      checkCallback: checking => {
+        if (!this.navigationHistory?.isNavigationSurfaceActive()) return false;
+        if (!checking) void this.navigationHistory.navigate(1);
+        return true;
       },
     });
     this.addCommand({
@@ -164,7 +276,10 @@ export default class ScriptoriumPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-open", file => this.recordRecentFile(file)));
     this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
       if (!leaf || !this.store) return;
+      const leafContainer = (leaf as any).containerEl as HTMLElement | undefined;
+      if (leafContainer?.closest(".mod-left-split, .mod-right-split")) return;
       this.layoutCoordinator.handleActiveView(leaf.view.getViewType(), this.settings.nativeUiHidden);
+      if (leaf.view instanceof AethericShellView) leaf.view.handleShellActivated();
     }));
 
     this.app.workspace.onLayoutReady(() => {
@@ -186,7 +301,11 @@ export default class ScriptoriumPlugin extends Plugin {
   onunload(): void {
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
     if (this.pollTimeout !== null) window.clearTimeout(this.pollTimeout);
+    this.hamasxiangAdapter?.dispose();
+    this.navigationHistory?.destroy();
+    this.imageGovernance?.stop();
     this.layoutCoordinator?.restore();
+    this.copilotSessionBridge?.stop();
     if (this.analyticsService) {
       this.analyticsService.destroy();
     }
@@ -289,10 +408,16 @@ export default class ScriptoriumPlugin extends Plugin {
       this.currentInstanceId = randomInstanceId;
 
       const env = { ...process.env, HAMAXIANG_INSTANCE_ID: randomInstanceId };
-      this.daemonProcess = spawn("python", [scriptPath], {
+      // ``python.exe`` creates a visible console host on some Windows builds
+      // even when Electron requests windowsHide.  Use the no-console sibling
+      // for this long-lived local service; macOS/Linux retain their normal
+      // interpreter command.
+      const daemonPython = process.platform === "win32" ? "pythonw.exe" : "python";
+      this.daemonProcess = spawn(daemonPython, [scriptPath], {
         cwd: systemPath,
         detached: false,
         stdio: "ignore",
+        windowsHide: true,
         env,
       });
 
@@ -329,7 +454,7 @@ export default class ScriptoriumPlugin extends Plugin {
         throw new Error("启动 Daemon 后无法在限时内连通服务或实例身份不吻合。");
       }
 
-      this.processRegistry.register("daemon", this.daemonProcess, "python", [scriptPath], systemPath);
+      this.processRegistry.register("daemon", this.daemonProcess, daemonPython, [scriptPath], systemPath);
       this.daemonProcess.on("close", (code) => {
         console.log(`[Hamasxiang Daemon] Process exited with code ${code}`);
         this.daemonProcess = null;
@@ -488,7 +613,15 @@ export default class ScriptoriumPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = mergeSettings(await this.loadData() as Partial<ScriptoriumSettings> | null);
+    const raw = await this.loadData() as Partial<ScriptoriumSettings> | null;
+    this.settings = mergeSettings(raw);
+    // Persist safety migrations immediately.  Otherwise a pre-v7
+    // `autoCompress: true` remains on disk forever and every startup has to
+    // rely on an in-memory interpretation of stale, unsafe configuration.
+    if ((raw?.schemaVersion ?? 0) !== this.settings.schemaVersion
+      || raw?.imageGovernance?.autoCompress !== this.settings.imageGovernance.autoCompress) {
+      await this.saveData(this.settings);
+    }
   }
 
   async saveSettings(): Promise<void> {
@@ -511,17 +644,6 @@ export default class ScriptoriumPlugin extends Plugin {
     await this.activateView();
     const leaf = this.app.workspace.getLeavesOfType(AETHERIC_SHELL_VIEW)[0];
     if (leaf?.view instanceof AethericShellView) leaf.view.selectFolder(folderPath);
-  }
-
-  async openLegacyView(): Promise<void> {
-    const leaves = this.app.workspace.getLeavesOfType(SCRIPTORIUM_DASHBOARD_VIEW);
-    let leaf: WorkspaceLeaf;
-    if (leaves.length) leaf = leaves[0];
-    else {
-      leaf = this.app.workspace.getLeaf("tab");
-      await leaf.setViewState({ type: SCRIPTORIUM_DASHBOARD_VIEW, active: true });
-    }
-    this.app.workspace.revealLeaf(leaf);
   }
 
   async openHamasxiangConsole(): Promise<void> {
@@ -576,8 +698,14 @@ export default class ScriptoriumPlugin extends Plugin {
   private async initializeShell(): Promise<void> {
     try {
       const startedAt = performance.now();
-      await this.indexService.build();
+      const indexBuild = await this.indexService.build();
       this.logBus.append("success", "vault.index", `Vault 轻量索引完成：${this.indexService.getFileCount()} 个节点`, Math.round(performance.now() - startedAt));
+      this.logBus.append(
+        "info",
+        "vault.index.phases",
+        `loaded ${indexBuild.loadedEntries} · indexed ${indexBuild.indexedFiles} files/${indexBuild.indexedFolders} folders · scan ${indexBuild.scanMs.toFixed(1)}ms · folders ${indexBuild.folderLookupMs.toFixed(1)}ms · relations ${indexBuild.relationsMs.toFixed(1)}ms · emit ${indexBuild.emitMs.toFixed(1)}ms`,
+        Math.round(indexBuild.totalMs),
+      );
       this.nativeUi.apply(this.settings.nativeUiHidden);
       void this.hamasxiangAdapter.refresh(false);
       if (this.settings.autoOpenShell) await this.activateView();
@@ -596,7 +724,10 @@ export default class ScriptoriumPlugin extends Plugin {
       .slice(0, 80);
     this.store.patch({ recentFilePaths });
     for (const leaf of this.app.workspace.getLeavesOfType(AETHERIC_SHELL_VIEW)) {
-      if (leaf.view instanceof AethericShellView) leaf.view.refreshRecent();
+      if (leaf.view instanceof AethericShellView) {
+        leaf.view.handleActiveDocument(file);
+        leaf.view.refreshRecent();
+      }
     }
   }
 

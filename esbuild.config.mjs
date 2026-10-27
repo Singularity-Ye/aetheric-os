@@ -19,8 +19,7 @@ const isProd = process.argv[2] === "production";
 const defaultDest = "C:\\Users\\Yhx06\\Documents\\Obsidian Vault\\.obsidian\\plugins\\obsidian-scriptorium";
 const targetDir = process.env.OBSIDIAN_PLUGIN_DIR || defaultDest;
 
-const styleSources = [
-  "styles.css",
+const aethericStyleSources = [
   "src/styles/tokens.css",
   "src/styles/shell.css",
   "src/styles/navigator.css",
@@ -38,14 +37,23 @@ const copyManifestAndStyles = () => {
     fs.copyFileSync("manifest.json", path.join(targetDir, "manifest.json"));
     console.log(`Copied manifest.json to ${targetDir}`);
     
-    // Source is authoritative: merge the legacy dashboard and Aetheric shell
-    // fragments into the single stylesheet Obsidian loads.
-    const mergedStyles = styleSources
+    // Merge the legacy dashboard prefix and each current Aetheric source once.
+    // Do not use the historical merged styles.css as a recursive build input.
+    const styleEntries = aethericStyleSources
       .filter((source) => fs.existsSync(source))
-      .map((source) => `/* source: ${source} */\n${fs.readFileSync(source, "utf8")}`)
+      .map((source) => ({ source, content: fs.readFileSync(source, "utf8").trimEnd() }));
+    const mergedStyles = styleEntries
+      .map(({ source, content }) => `/* source: ${source} */\n${content}`)
       .join("\n\n");
+    for (const { source } of styleEntries) {
+      const marker = `/* source: ${source} */`;
+      const occurrences = mergedStyles.split(marker).length - 1;
+      if (occurrences !== 1) {
+        throw new Error(`CSS source section must occur exactly once: ${source} (${occurrences})`);
+      }
+    }
     fs.writeFileSync(path.join(targetDir, "styles.css"), mergedStyles, "utf8");
-    console.log(`Built styles.css from ${styleSources.length} source files into ${targetDir}`);
+    console.log(`Built styles.css from ${styleEntries.length} unique source sections into ${targetDir}`);
   } catch (err) {
     console.error("Error during copying assets:", err);
   }

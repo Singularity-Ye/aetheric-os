@@ -1,11 +1,51 @@
 export type AethericModule =
   | "overview"
+  | "schedule"
   | "navigation"
   | "collection"
   | "tasks"
   | "intelligence"
+  | "inspiration"
   | "knowledge"
   | "logs";
+
+export interface ModuleLayoutState {
+  /** All modules, including temporarily hidden ones, in their saved order. */
+  order: AethericModule[];
+  /** Hidden modules are removed from the rail without deleting the feature. */
+  hidden: AethericModule[];
+}
+
+export const DEFAULT_MODULE_ORDER: AethericModule[] = [
+  "overview",
+  "schedule",
+  "navigation",
+  "collection",
+  "tasks",
+  "intelligence",
+  "inspiration",
+  "knowledge",
+  "logs",
+];
+
+/** The two anchors keep the workbench reachable even after a quick edit. */
+export const CORE_MODULES: AethericModule[] = ["overview", "navigation"];
+
+export function normalizeModuleLayout(raw?: Partial<ModuleLayoutState> | null): ModuleLayoutState {
+  const valid = new Set<AethericModule>(DEFAULT_MODULE_ORDER);
+  const order: AethericModule[] = [];
+  for (const id of raw?.order ?? []) {
+    if (valid.has(id) && !order.includes(id)) order.push(id);
+  }
+  for (const id of DEFAULT_MODULE_ORDER) {
+    if (!order.includes(id)) order.push(id);
+  }
+  const hidden: AethericModule[] = [];
+  for (const id of raw?.hidden ?? []) {
+    if (valid.has(id) && !CORE_MODULES.includes(id) && !hidden.includes(id)) hidden.push(id);
+  }
+  return { order, hidden };
+}
 
 export type NavigatorMode = "full" | "compact" | "collapsed";
 
@@ -43,6 +83,7 @@ export type LogLevel = "info" | "success" | "warn" | "error";
 
 export interface AethericShellState {
   activeModule: AethericModule;
+  moduleLayout: ModuleLayoutState;
   selectedWorkspaceId: string;
   selectedProjectId: string | null;
   selectedFolderPath: string;
@@ -106,7 +147,7 @@ export interface LogEntry {
   durationMs?: number;
 }
 
-export type OperationTaskStatus = "online" | "offline" | "queued" | "running" | "success" | "failed" | "idle" | "unknown";
+export type OperationTaskStatus = "online" | "offline" | "queued" | "running" | "awaiting_sync" | "insufficient_evidence" | "blocked" | "success" | "failed" | "interrupted" | "idle" | "unknown";
 
 export interface OperationTask {
   id: string;
@@ -210,22 +251,6 @@ export const DEFAULT_WORKSPACES: AethericWorkspace[] = [
     ],
   },
   {
-    id: "erliu-novelist",
-    name: "二流小说家",
-    icon: "feather",
-    rootPaths: ["02_丹炉间（项目区）/二流小说家"],
-    projects: [
-      { id: "erliu-h5-reset", name: "H5-first 重构", status: "进行中", rootPath: "02_丹炉间（项目区）/二流小说家" },
-      { id: "erliu-user-lab", name: "自用试读实验", status: "进行中", rootPath: "02_丹炉间（项目区）/二流小说家/02_自用验证" },
-      { id: "erliu-agent", name: "飞书项目管家", status: "已接入", rootPath: "02_丹炉间（项目区）/二流小说家/04_飞书项目管家" },
-    ],
-    capabilities: [
-      { id: "erliu-product-truth", name: "产品真源", description: "定位、用户思维与价值主张" },
-      { id: "erliu-progress", name: "进展收口", description: "任务卡、提交、阻断与下一步" },
-      { id: "erliu-fiction-eval", name: "小说试读", description: "自用口味、章节质量与追更反馈" },
-    ],
-  },
-  {
     id: "courses",
     name: "课程知识库",
     icon: "book-open",
@@ -250,6 +275,10 @@ export const DEFAULT_WORKSPACES: AethericWorkspace[] = [
 
 export const DEFAULT_SHELL_STATE: AethericShellState = {
   activeModule: "overview",
+  moduleLayout: {
+    order: [...DEFAULT_MODULE_ORDER],
+    hidden: [],
+  },
   selectedWorkspaceId: "hamaxiang",
   selectedProjectId: null,
   selectedFolderPath: DEFAULT_WORKSPACES[0].rootPaths[0],

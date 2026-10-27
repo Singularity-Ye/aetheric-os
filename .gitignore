@@ -1,6 +1,9 @@
 node_modules/
 _baseline/
-scratch/
+scratch/*
+!scratch/test-asset-registry-bridge.mjs
+!scratch/test-image-governance-safety.mjs
+!scratch/test-image-cloud-panel.mjs
 
 .env
 .env.*

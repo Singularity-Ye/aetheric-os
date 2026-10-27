@@ -23,6 +23,11 @@ export class CompatAdapter {
     return !!(plugins && plugins["realclaudian"]);
   }
 
+  static isCopilotAvailable(app: App): boolean {
+    const plugins = (app as any).plugins?.plugins;
+    return !!(plugins && plugins["copilot"]);
+  }
+
   static isClaudianViewInitialized(leaf: any): boolean {
     if (!leaf || !leaf.view) return false;
     if (leaf.view.getViewType() !== "claudian-view") return false;

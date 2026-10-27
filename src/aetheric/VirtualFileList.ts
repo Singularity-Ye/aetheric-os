@@ -34,6 +34,13 @@ export class VirtualFileList {
   }
 
   setItems(nodes: KnowledgeNodeViewModel[], selectedPath: string | null): void {
+    if (nodes === this.rawNodes) {
+      if (selectedPath !== this.selectedPath) {
+        this.selectedPath = selectedPath;
+        this.renderWindow();
+      }
+      return;
+    }
     this.rawNodes = nodes;
     this.selectedPath = selectedPath;
     this.rebuildItems();

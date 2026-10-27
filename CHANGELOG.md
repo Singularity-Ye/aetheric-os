@@ -15,6 +15,40 @@ date: 2026-07-19
 
 > 这里记录已经落地并通过验证的改动。后来接手的 Agent，先看这一页，再看对应专题文档和源码差异。
 
+## Unreleased · 收件箱地图 MVP（2026-07-28）
+
+- 新增 `src/aetheric/InboxGraphAdapter.ts`：将收件箱 Markdown 以只读方式投影为 area、platform、status、period，以及可选 folder 分面。
+- 知识库页默认进入“收件箱地图”镜头；支持四个分面筛选、目录边开关、分面节点反向筛选和点击笔记打开原文。
+- 默认采用全宽自由关系图运行时（径向种子 + 有界力场），支持拖拽、缩放、平移、适配画布和归一化布局缓存；不改变原生 Graph 入口。地图关系携带 `relationType`、`evidence` 与 `confidence`，缺失 frontmatter 时明确显示推断边。
+- 新增主动/后台采集镜头：`aos-cloud-x-watch`、`x_watch` 等定时信号默认隐藏，用户主动 `local_capture` / `capture_request_id` 链接默认展示；原始文件仍保留，界面提供开关查看后台信号。
+- 验证：Scriptorium TypeScript noEmit、生产构建、部署版 `main.js` 语法检查和新增适配器契约测试通过；在批准的外部测试环境中完整 `npm test` 通过（Worker 6/6、Agent Dock 13/13、布局 10/10、Copilot 11/11）。沙箱内单独运行 Worker 测试会因 `../../..` 访问限制失败，但不是代码失败。
+- 当前边界：尚未完成真实 Vault 大数据量浏览器 smoke 与用户肉眼验收；未移动、复制或写回旧笔记。
+
+## v1.3.8 · Copilot 会话续接与原生首页恢复（2026-07-21）
+
+- 根因确认：Copilot 3.3.3 的 `autosaveChat=true` 会在每个新会话首次落盘时提示 `Chat saved as note`；这不是 Hermes 接入或天工台容器触发。
+- Copilot 原配置同时关闭了 `showSuggestedPrompts` 与 `showRelevantNotes`，因此空会话只剩灰色消息区；两项已恢复，未改 API、模型或密钥配置。
+- 新增版本锁定的 `CopilotSessionBridge`：保留原生 Markdown 自动保存，只静默精确匹配的保存成功 Notice；本次启动首次通过全局 Agent 打开 Copilot 时，调用 3.3.3 已有 `getChatHistoryItems/loadChatById` 恢复最近会话。
+- 会话桥不读写聊天正文、不修改 Copilot `main.js`，Copilot 版本变化或内部方法缺失时安全跳过。
+- Shell↔原生工作区暖色遮罩增加 90ms 最短可见时间并提高暖黄色浓度；note↔note 仍无蒙版。
+- Copilot 会话桥 8/8、Agent Dock 13/13、布局过渡 10/10、Worker 6/6、TypeScript 与生产构建通过；待 Obsidian 重载实机验收。
+
+## v1.3.7 · 全局 Agent 入口与跨模式遮罩判定（2026-07-21）
+
+- `Agent` 从笔记详情三联 Tab 中移除，提升为天工台顶栏全局按钮。
+- 有选中节点时打开对应原生笔记并展开唯一 Copilot 右栏；无选中节点时打开原生空白标签页，同时展开左侧文件目录和右侧 Copilot。
+- 清除旧 Copilot 内嵌容器的压缩 CSS 与 DOM 搬运分支；截图中的大块空白确认是 Copilot 原生“空消息区 + 底部输入框”布局，并非天工台仍在压缩高度。
+- 黄色遮罩只在 Shell 与原生工作区之间跨模式切换时出现；Markdown→Markdown、空白页→Markdown 以及左右侧栏焦点变化不再生成遮罩。
+- Agent Dock 合同 12/12、布局过渡合同 9/9、Worker 合同 6/6、TypeScript 与生产构建通过；构建已复制安装目录，待 Obsidian 重载肉眼终验。
+
+## v1.3.6 · Agent 原生右侧 Dock（2026-07-21）
+
+- 笔记详情中的 `Agent` 按钮不再切换内嵌聊天 Tab，也不再把 Copilot `contentEl` 搬进节点卡片。
+- 点击按钮会先在中央原生编辑器打开所选笔记，再复用或创建唯一 `copilot-chat-view` 右侧 leaf，并调用 Obsidian 原生 `revealLeaf()` 展开。
+- Copilot 的尺寸、滚动、会话与重载生命周期重新交给 Obsidian/Copilot 管理，避免节点重绘导致聊天 DOM 反复挂载。
+- 当前版本不调用未公开的 Copilot 上下文内部 API；需要全文时由用户在右侧点击 `Add context`。后续再做版本锁定的显式上下文适配器。
+- Agent Dock 静态合同 8/8、Worker 既有合同 6/6、TypeScript noEmit 与 production build 通过；待 Obsidian 重载后进行肉眼布局与会话保持验收。
+
 ## v1.3.2 · 侧栏常驻与关系索引重构（2026-07-19）
 
 ### 这版解决了什么

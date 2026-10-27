@@ -3,15 +3,22 @@ import { NativeUiService } from "./NativeUiService";
 
 type LayoutTarget = "shell" | "document" | "native";
 
+export function shouldMaskLayoutTransition(from: LayoutTarget, to: LayoutTarget): boolean {
+  return (from === "shell") !== (to === "shell");
+}
+
 /**
  * Owns all transitions between the Aetheric shell and native Obsidian views.
  * Keeping this in one place prevents active-leaf-change and openNode() from
  * racing to collapse/expand the same split panes.
  */
 export class LayoutCoordinator {
+  private readonly minimumMaskHoldMs = 90;
   private transaction = 0;
   private target: LayoutTarget = "native";
   private mask: HTMLDivElement | null = null;
+  private maskShownAt = 0;
+  private maskWatchdog: number | null = null;
   private documentOpenTransaction: number | null = null;
 
   constructor(private app: App, private nativeUi: NativeUiService) {}
@@ -19,41 +26,41 @@ export class LayoutCoordinator {
   handleActiveView(viewType: string, hideNativeUi: boolean): void {
     if (viewType === "aetheric-os-shell-view") {
       this.documentOpenTransaction = null;
-      const token = this.begin("shell");
+      this.activateTarget("shell");
       this.nativeUi.apply(hideNativeUi);
-      this.finishAfterPaint(token);
       return;
     }
 
-    if (viewType === "markdown") {
+    if (viewType === "markdown" || viewType === "empty") {
       // openNode() owns the mask until openFile() resolves. The leaf event only
       // makes sure the native chrome is visible and the warm sidebar is open.
+      if (this.documentOpenTransaction === null) {
+        this.activateTarget("document");
+      }
       this.nativeUi.apply(false);
       this.ensureDocumentSidebar();
-      if (this.documentOpenTransaction === null) {
-        const token = this.begin("document");
-        this.finishAfterPaint(token);
-      }
       return;
     }
 
     this.documentOpenTransaction = null;
-    const token = this.begin("native");
+    this.activateTarget("native");
     this.nativeUi.apply(false);
-    this.finishAfterPaint(token);
   }
 
-  beginDocumentOpen(): number {
-    const token = this.begin("document");
+  beginDocumentOpen(): number | null {
+    const shouldMask = shouldMaskLayoutTransition(this.target, "document");
+    const token = ++this.transaction;
+    this.target = "document";
     this.documentOpenTransaction = token;
+    if (shouldMask) this.ensureMask();
     this.nativeUi.apply(false);
     this.ensureDocumentSidebar();
-    return token;
+    return shouldMask ? token : null;
   }
 
-  completeDocumentOpen(token: number): void {
-    if (this.documentOpenTransaction === token) this.documentOpenTransaction = null;
-    this.finishAfterPaint(token);
+  completeDocumentOpen(token: number | null): void {
+    this.documentOpenTransaction = null;
+    if (token !== null) this.finishAfterPaint(token);
   }
 
   restore(): void {
@@ -64,33 +71,64 @@ export class LayoutCoordinator {
     this.nativeUi.restore();
   }
 
-  private begin(target: LayoutTarget): number {
+  private activateTarget(target: LayoutTarget): void {
+    if (!shouldMaskLayoutTransition(this.target, target)) {
+      this.transaction += 1;
+      this.target = target;
+      this.removeMask();
+      return;
+    }
     const token = ++this.transaction;
     this.target = target;
     this.ensureMask();
-    return token;
+    this.finishAfterPaint(token);
   }
 
   private ensureDocumentSidebar(): void {
     // The shell no longer collapses this split, so Claudian and its scroll/input
-    // state remain mounted. expand() only restores older persisted/collapsed layouts.
-    this.app.workspace.rightSplit.expand();
+    // state remain mounted. Obsidian's expand() performs workspace layout work,
+    // so only call it when an older persisted layout is actually collapsed.
+    if (this.app.workspace.rightSplit.collapsed) {
+      this.app.workspace.rightSplit.expand();
+    }
   }
 
   private ensureMask(): void {
-    if (this.mask?.isConnected) return;
+    if (this.mask?.isConnected) {
+      this.armMaskWatchdog();
+      return;
+    }
     const existing = this.app.workspace.containerEl.querySelector<HTMLDivElement>(".aos-page-transition-mask");
     if (existing) {
       this.mask = existing;
+      this.maskShownAt = performance.now();
+      this.armMaskWatchdog();
       return;
     }
     this.mask = this.app.workspace.containerEl.createDiv({ cls: "aos-page-transition-mask" });
+    this.maskShownAt = performance.now();
     this.mask.createDiv({ cls: "aos-spinner" });
+    this.armMaskWatchdog();
+  }
+
+  private armMaskWatchdog(): void {
+    if (this.maskWatchdog !== null) window.clearTimeout(this.maskWatchdog);
+    const transaction = this.transaction;
+    this.maskWatchdog = window.setTimeout(() => {
+      this.maskWatchdog = null;
+      if (this.mask?.isConnected && transaction === this.transaction) {
+        console.warn("Aetheric layout transition exceeded watchdog; removing stale mask");
+        this.removeMask();
+      }
+    }, 8000);
   }
 
   private finishAfterPaint(token: number): void {
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => this.finish(token));
+      window.requestAnimationFrame(() => {
+        const remaining = Math.max(0, this.minimumMaskHoldMs - (performance.now() - this.maskShownAt));
+        window.setTimeout(() => this.finish(token), remaining);
+      });
     });
   }
 
@@ -107,7 +145,12 @@ export class LayoutCoordinator {
   }
 
   private removeMask(): void {
+    if (this.maskWatchdog !== null) {
+      window.clearTimeout(this.maskWatchdog);
+      this.maskWatchdog = null;
+    }
     this.mask?.remove();
     this.mask = null;
+    this.maskShownAt = 0;
   }
 }
