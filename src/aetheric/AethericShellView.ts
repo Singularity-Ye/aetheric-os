@@ -66,6 +66,7 @@ import {
   WorkspaceGraphDepth,
 } from "./InboxGraphAdapter";
 import { ForceGraphRuntime, type ForceGraphEdgeLabelMode, type ForceGraphPerformanceSample } from "./ForceGraphRuntime";
+import { CanvasLocalGraph, type CanvasLocalGraphData } from "./CanvasLocalGraph";
 import {
   DEFAULT_RELATION_NODE_BUDGET,
   MAX_RELATION_NODE_BUDGET,
@@ -339,6 +340,8 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
   private hoveredSemanticGraphNode: InboxTemplateGraphNode | null = null;
   /** The packaged Aetheric SVG force-graph renderer, hosted by the shell adapter. */
   private inboxGraphRuntime: ForceGraphRuntime | null = null;
+  private canvasGraph: CanvasLocalGraph | null = null;
+  private atlasFilterQuery = "";
   private graphEdgeLabelMode: ForceGraphEdgeLabelMode = "explore";
   private relationNodeBudget = DEFAULT_RELATION_NODE_BUDGET;
   private nativeGraphView: any = null;
@@ -502,6 +505,8 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     this.scheduleRenderToken += 1;
     this.cancelKnowledgeGraphRefresh();
     this.inspirationAttachInFlight.clear();
+    this.canvasGraph?.destroy();
+    this.canvasGraph = null;
     this.disposeInboxGraphRuntime();
     this.disposeNativeGraphView();
     this.virtualList?.destroy();
@@ -695,8 +700,12 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     }
     const state = this.plugin.store.getSnapshot();
     const expanded = this.getPathChain(normalized);
+    this.graphFolderPath = normalized;
+    this.semanticGraphFolderPath = normalized;
+    const currentModule = state.activeModule;
+    const targetModule = currentModule === "knowledge" ? "knowledge" : "navigation";
     this.plugin.store.patch({
-      activeModule: "navigation",
+      activeModule: targetModule,
       selectedFolderPath: normalized,
       selectedFilePath: null,
       expandedFolderPaths: expanded,
@@ -1409,13 +1418,12 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     this.lifeDashboard = null;
     this.mainPane.empty();
 
-    if (module === "navigation") this.renderNavigation();
+    if (module === "navigation" || module === "knowledge") this.renderKnowledgeAtlas();
     else if (module === "schedule") this.renderSchedule();
     else if (module === "collection") this.renderCollection();
     else if (module === "tasks") this.renderTasks();
     else if (module === "intelligence") this.renderIntelligence();
     else if (module === "inspiration") this.renderInspiration();
-    else if (module === "knowledge") this.renderKnowledgeGraph();
     else if (module === "logs") this.renderLogsPage();
     else this.renderPlannedModule(module);
   }
@@ -3659,6 +3667,227 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     if (candidates.length > 12) {
       section.createDiv({ cls: "aos-panel-note aos-inspiration-candidate-more", text: `还有 ${candidates.length - 12} 条候选素材；可按来源目录打开收件箱继续挑选。` });
     }
+  }
+
+  private renderKnowledgeAtlas(): void {
+    this.currentRenderId += 1;
+    this.disposeInboxGraphRuntime();
+    this.disposeNativeGraphView();
+    if (this.canvasGraph) {
+      this.canvasGraph.destroy();
+      this.canvasGraph = null;
+    }
+    this.mainPane.empty();
+
+    const state = this.plugin.store.getSnapshot();
+    const folderPath = state.selectedFolderPath || this.getWorkspace()?.rootPaths[0] || "";
+
+    const page = this.mainPane.createDiv({ cls: "aos-page aos-atlas-page" });
+    const stream = page.createDiv({ cls: "aos-atlas-stream" });
+    this.renderAtlasNoteStream(stream, folderPath);
+
+    const graph = page.createDiv({ cls: "aos-atlas-graph" });
+    this.renderAtlasCanvasGraph(graph, folderPath);
+  }
+
+  private renderAtlasNoteStream(parent: HTMLElement, folderPath: string): void {
+    const state = this.plugin.store.getSnapshot();
+    
+    // Header & Clickable Breadcrumbs
+    const header = parent.createDiv({ cls: "aos-atlas-stream-header" });
+    const breadcrumb = header.createDiv({ cls: "aos-atlas-breadcrumb" });
+    const parts = folderPath.split("/").filter(Boolean);
+    let accum = "";
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      accum = accum ? `${accum}/${part}` : part;
+      const targetPath = accum;
+      const isLast = i === parts.length - 1;
+      
+      const crumb = breadcrumb.createEl("button", {
+        cls: `aos-crumb-btn ${isLast ? "is-current" : ""}`,
+        text: part,
+      });
+      crumb.addEventListener("click", () => this.selectFolder(targetPath));
+      if (!isLast) {
+        breadcrumb.createSpan({ cls: "aos-crumb-sep", text: "›" });
+      }
+    }
+
+    const countBadge = header.createSpan({ cls: "aos-atlas-count-badge" });
+
+    // Search and Action bar
+    const searchBar = parent.createDiv({ cls: "aos-atlas-search-bar" });
+    const searchInput = searchBar.createEl("input", {
+      cls: "aos-atlas-search-input",
+      attr: { placeholder: "搜索过滤当前笔记…" },
+    });
+    searchInput.value = this.atlasFilterQuery || "";
+
+    const addNoteBtn = searchBar.createEl("button", {
+      cls: "aos-icon-button aos-atlas-add-btn",
+      attr: { title: "在此目录新建笔记" },
+    });
+    setIcon(addNoteBtn, "file-plus-2");
+    addNoteBtn.addEventListener("click", () => void this.openNoteEditorModal());
+
+    // Note List Viewport
+    const listContainer = parent.createDiv({ cls: "aos-atlas-note-list" });
+
+    const renderList = (filter = "") => {
+      listContainer.empty();
+      let allNotes = this.plugin.indexService.listFiles(folderPath);
+      if (filter.trim()) {
+        const needle = filter.trim().toLowerCase();
+        allNotes = allNotes.filter(n =>
+          n.title.toLowerCase().includes(needle) ||
+          n.path.toLowerCase().includes(needle) ||
+          n.tags.some(t => t.toLowerCase().includes(needle))
+        );
+      }
+
+      countBadge.textContent = `${allNotes.length} 篇`;
+
+      if (allNotes.length === 0) {
+        listContainer.createDiv({ cls: "aos-empty-hint", text: "当前目录暂无笔记" });
+        return;
+      }
+
+      for (const node of allNotes) {
+        const isSelected = (this.selectedNode?.path === node.path) || (state.selectedFilePath === node.path);
+        const card = listContainer.createDiv({ cls: `aos-atlas-note-card ${isSelected ? "is-selected" : ""}` });
+        
+        // Icon
+        const iconSpan = card.createSpan({ cls: `aos-atlas-card-icon is-${node.kind}` });
+        setIcon(iconSpan, node.kind === "project" ? "folder" : "file-text");
+
+        // Primary info
+        const body = card.createDiv({ cls: "aos-atlas-card-body" });
+        const titleRow = body.createDiv({ cls: "aos-atlas-card-title-row" });
+        titleRow.createSpan({ cls: "aos-atlas-card-title", text: node.title });
+
+        const metaRow = body.createDiv({ cls: "aos-atlas-card-meta-row" });
+        metaRow.createSpan({ cls: "aos-atlas-card-date", text: this.formatAtlasDate(node.mtime) });
+        if (node.relationCount > 0) {
+          metaRow.createSpan({ cls: "aos-atlas-card-relations", text: `🔗 ${node.relationCount}` });
+        }
+        if (node.tags && node.tags.length > 0) {
+          for (const t of node.tags.slice(0, 2)) {
+            metaRow.createSpan({ cls: "aos-atlas-card-tag", text: `#${t}` });
+          }
+        }
+
+        card.addEventListener("click", () => {
+          this.selectNode(node);
+          this.canvasGraph?.setSelectedNode(node.path);
+          listContainer.querySelectorAll(".aos-atlas-note-card").forEach(el => el.classList.remove("is-selected"));
+          card.classList.add("is-selected");
+        });
+
+        card.addEventListener("dblclick", () => {
+          void this.openNode(node);
+        });
+
+        card.addEventListener("contextmenu", event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const menu = new Menu();
+          menu.addItem(item => {
+            item.setTitle("在编辑器中打开")
+              .setIcon("file-edit")
+              .onClick(() => void this.openNode(node));
+          });
+          menu.addItem(item => {
+            item.setTitle(this.plugin.store.getSnapshot().favoritePaths.includes(node.path) ? "★ 取消收藏" : "☆ 收藏笔记")
+              .setIcon("star")
+              .onClick(() => this.toggleFavorite(node.path));
+          });
+          menu.showAtPosition({ x: event.clientX, y: event.clientY });
+        });
+      }
+    };
+
+    searchInput.addEventListener("input", () => {
+      this.atlasFilterQuery = searchInput.value;
+      renderList(searchInput.value);
+    });
+
+    renderList(this.atlasFilterQuery || "");
+  }
+
+  private formatAtlasDate(timestamp: number): string {
+    const d = new Date(timestamp);
+    const now = new Date();
+    const isThisYear = d.getFullYear() === now.getFullYear();
+    const month = d.getMonth() + 1;
+    const date = d.getDate();
+    return isThisYear ? `${month}/${date}` : `${d.getFullYear()}/${month}/${date}`;
+  }
+
+  private renderAtlasCanvasGraph(parent: HTMLElement, folderPath: string): void {
+    const state = this.plugin.store.getSnapshot();
+    const folderName = folderPath.split("/").pop() || folderPath;
+
+    // Graph Toolbar
+    const toolbar = parent.createDiv({ cls: "aos-atlas-graph-toolbar" });
+    const info = toolbar.createDiv({ cls: "aos-atlas-graph-info" });
+    const folderIcon = info.createSpan({ cls: "aos-atlas-folder-icon" });
+    setIcon(folderIcon, "git-fork");
+    info.createSpan({ cls: "aos-atlas-folder-title", text: `局部关系图谱 · ${folderName}` });
+
+    const tools = toolbar.createDiv({ cls: "aos-atlas-graph-tools" });
+    const resetBtn = tools.createEl("button", { cls: "aos-graph-btn", text: "居中复位" });
+    this.decorateGraphButton(resetBtn, "maximize-2");
+    resetBtn.addEventListener("click", () => this.canvasGraph?.resetView());
+
+    const relayoutBtn = tools.createEl("button", { cls: "aos-graph-btn", text: "重新布局" });
+    this.decorateGraphButton(relayoutBtn, "refresh-cw");
+    relayoutBtn.addEventListener("click", () => this.canvasGraph?.restartLayout());
+
+    // Canvas Host
+    const canvasHost = parent.createDiv({ cls: "aos-atlas-canvas-host" });
+
+    // Scoped graph data using our fixed VaultIndexService!
+    const rawData = this.plugin.indexService.getGraphData(
+      state.selectedFilePath,
+      "current-folder",
+      this.getWorkspace(),
+      folderPath,
+      64,
+    );
+
+    const graphData: CanvasLocalGraphData = {
+      nodes: rawData.nodes,
+      edges: rawData.edges,
+      folderName,
+    };
+
+    // Stats indicator
+    const stats = toolbar.createDiv({ cls: "aos-atlas-graph-stats" });
+    stats.textContent = `${graphData.nodes.length} 节点 · ${graphData.edges.length} 关联`;
+
+    this.canvasGraph = new CanvasLocalGraph(canvasHost, {
+      onSelectNode: (path) => {
+        const node = this.toNode(path);
+        if (node) {
+          this.selectNode(node);
+          const streamList = this.mainPane.querySelector(".aos-atlas-note-list");
+          if (streamList) {
+            streamList.querySelectorAll(".aos-atlas-note-card").forEach(c => {
+              const match = c.querySelector(".aos-atlas-card-title")?.textContent === node.title;
+              c.classList.toggle("is-selected", match);
+              if (match) c.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            });
+          }
+        }
+      },
+      onOpenNode: (path) => {
+        const node = this.toNode(path);
+        if (node) void this.openNode(node);
+      },
+    });
+
+    this.canvasGraph.setData(graphData, state.selectedFilePath);
   }
 
   private renderNavigation(): void {

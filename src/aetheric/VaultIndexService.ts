@@ -327,7 +327,23 @@ export class VaultIndexService {
       if (seed && matchesScope(seed)) candidates.set(seed.path, { file: seed, depth: 0 });
       for (const file of pool) {
         if (candidates.size >= limit) break;
-        if (!candidates.has(file.path)) candidates.set(file.path, { file, depth: 1 });
+        if (!matchesScope(file)) continue;
+        if (!candidates.has(file.path)) candidates.set(file.path, { file, depth: scope === "current-folder" ? 0 : 1 });
+      }
+
+      // If current-folder scope, expand direct 1-hop cross-links for nodes in this folder
+      if (scope === "current-folder") {
+        const folderPaths = [...candidates.keys()];
+        for (const p of folderPaths) {
+          if (candidates.size >= limit) break;
+          for (const related of this.getRelatedPaths(p)) {
+            if (candidates.size >= limit) break;
+            if (!candidates.has(related) && isGraphVisiblePath(related)) {
+              const relFile = this.filesByPath.get(related);
+              if (relFile) candidates.set(related, { file: relFile, depth: 1 });
+            }
+          }
+        }
       }
     }
 
