@@ -3536,9 +3536,26 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     const module = this.plugin.store.getSnapshot().activeModule;
     this.applyModuleSurfacePolicy(module);
     this.contextPane.empty();
-    if (!moduleUsesContextPane(module)) return;
+    if (!moduleUsesContextPane(module) || (module === "navigation" && !this.selectedNode)) return;
     const header = this.contextPane.createDiv({ cls: "aos-context-header" });
-    header.createDiv({ cls: "aos-context-title", text: this.selectedNode?.title ?? "节点上下文" });
+    const titleRow = header.createDiv({ cls: "aos-context-title-row" });
+    titleRow.createDiv({ cls: "aos-context-title", text: this.selectedNode?.title ?? "节点上下文" });
+    const closeBtn = titleRow.createEl("button", {
+      cls: "aos-context-close-btn",
+      attr: { "aria-label": "关闭上下文面板", title: "关闭" },
+    });
+    setIcon(closeBtn, "x");
+    closeBtn.addEventListener("click", () => {
+      this.selectedNode = null;
+      this.renderContext();
+      this.mainPane.querySelectorAll(".aos-atlas-note-card.is-selected").forEach(el => el.classList.remove("is-selected"));
+      setTimeout(() => {
+        this.atlasPage?.onResize();
+        if (this.nativeGraphView && typeof this.nativeGraphView.onResize === "function") {
+          this.nativeGraphView.onResize();
+        }
+      }, 240);
+    });
     if (this.selectedNode) header.createDiv({ cls: "aos-context-path", text: this.selectedNode.path });
     else header.createDiv({ cls: "aos-context-path", text: "选择知识节点后显示真实上下文" });
 
@@ -6616,7 +6633,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
   private applyModuleSurfacePolicy(module = this.plugin.store.getSnapshot().activeModule): void {
     if (!this.root) return;
     this.root.dataset.aosModule = module;
-    const contextVisible = moduleUsesContextPane(module);
+    const contextVisible = moduleUsesContextPane(module) && (module !== "navigation" || this.selectedNode !== null);
     this.root.classList.toggle("aos-hide-context-pane", !contextVisible);
     this.contextPane?.setAttribute("aria-hidden", contextVisible ? "false" : "true");
   }

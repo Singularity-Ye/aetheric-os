@@ -262,6 +262,7 @@ button.aos-chat-send-btn:active {
   display: grid;
   grid-template-columns: 64px var(--aos-navigator-width, 250px) minmax(0, 1fr) var(--aos-context-width, 330px);
   overflow: hidden;
+  transition: grid-template-columns 220ms var(--aos-ease-paper, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .aos-mode-rail {

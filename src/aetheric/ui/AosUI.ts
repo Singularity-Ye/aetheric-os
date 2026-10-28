@@ -37,6 +37,8 @@ export interface AosBreadcrumbsOptions {
   folderPath: string;
   countText?: string;
   onSelectFolder: (targetPath: string) => void;
+  onCollapse?: () => void;
+  collapseTitle?: string;
 }
 
 export interface AosSearchInputOptions {
@@ -166,6 +168,18 @@ export class AosUI {
     const countBadge = container.createSpan({ cls: "aos-atlas-count-badge" });
     if (options.countText) {
       countBadge.textContent = options.countText;
+    }
+
+    if (options.onCollapse) {
+      const collapseBtn = container.createEl("button", {
+        cls: "aos-crumb-collapse-btn",
+        attr: { "aria-label": options.collapseTitle || "收起笔记列表", title: options.collapseTitle || "收起笔记列表" },
+      });
+      setIcon(collapseBtn, "panel-left-close");
+      collapseBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        options.onCollapse!();
+      });
     }
 
     return { containerEl: container, breadcrumbEl: breadcrumb, countBadgeEl: countBadge };

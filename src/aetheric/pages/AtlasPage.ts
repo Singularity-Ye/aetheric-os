@@ -1,5 +1,4 @@
 import { App, Menu, TFile } from "obsidian";
-import { CanvasLocalGraph, type CanvasLocalGraphData } from "../CanvasLocalGraph";
 import { AosUI } from "../ui/AosUI";
 import { CompatAdapter } from "../CompatAdapter";
 import type { KnowledgeNodeViewModel } from "../types";
@@ -28,16 +27,17 @@ export interface AtlasPageContext {
 
 /**
  * AtlasPage: The Unified Knowledge Atlas Workbench.
- * Integrates Note Stream (Column 2) and Dual-Engine Graph View (Column 3: Native & Canvas).
+ * Integrates Note Stream (Column 2) and Native Obsidian Graph View (Column 3).
  * Fully decoupled from the main shell monolith.
  */
 export class AtlasPage {
   private containerEl: HTMLElement | null = null;
-  private canvasGraph: CanvasLocalGraph | null = null;
   private filterQuery = "";
-  private graphEngine: "native" | "canvas" = "native";
   private graphScope: "current-folder" | "current-file" = "current-folder";
   private currentFolderPath = "";
+  private isStreamCollapsed = false;
+  private graphToolsEl: HTMLElement | null = null;
+  private streamToggleBtn: HTMLButtonElement | null = null;
 
   constructor(private context: AtlasPageContext) {}
 
@@ -45,40 +45,84 @@ export class AtlasPage {
     this.destroy();
     this.currentFolderPath = folderPath;
     this.containerEl = parent.createDiv({ cls: "aos-page aos-atlas-page" });
+    if (this.isStreamCollapsed) {
+      this.containerEl.addClass("is-stream-collapsed");
+    }
 
     // Column 2: Note Stream
     const stream = this.containerEl.createDiv({ cls: "aos-atlas-stream" });
     this.renderNoteStream(stream, folderPath);
 
-    // Column 3: Graph Viewport
+    // Column 3: Graph Viewport (Strictly Native Obsidian Graph)
     const graphCol = this.containerEl.createDiv({ cls: "aos-atlas-graph" });
     this.renderGraph(graphCol, folderPath);
   }
 
   destroy(): void {
-    if (this.canvasGraph) {
-      this.canvasGraph.destroy();
-      this.canvasGraph = null;
-    }
     this.context.disposeNativeGraphView();
     if (this.containerEl) {
       this.containerEl.empty();
       this.containerEl = null;
     }
+    this.graphToolsEl = null;
+    this.streamToggleBtn = null;
   }
 
   onResize(): void {
-    this.canvasGraph?.resetView();
+    const nativeGv = this.context.getNativeGraphView();
+    if (nativeGv && typeof nativeGv.onResize === "function") {
+      nativeGv.onResize();
+    }
+  }
+
+  public toggleStream(collapse?: boolean): void {
+    this.isStreamCollapsed = collapse !== undefined ? collapse : !this.isStreamCollapsed;
+    if (this.containerEl) {
+      this.containerEl.classList.toggle("is-stream-collapsed", this.isStreamCollapsed);
+    }
+    if (this.graphToolsEl && this.currentFolderPath) {
+      this.updateStreamToggleBtn(this.graphToolsEl, this.currentFolderPath);
+    }
+    setTimeout(() => {
+      this.onResize();
+    }, 240);
+  }
+
+  private updateStreamToggleBtn(toolsEl: HTMLElement, folderPath: string): void {
+    if (this.streamToggleBtn) {
+      this.streamToggleBtn.remove();
+      this.streamToggleBtn = null;
+    }
+    const noteCount = this.context.plugin.indexService.listFiles(folderPath).length;
+    if (this.isStreamCollapsed) {
+      this.streamToggleBtn = AosUI.button(toolsEl, {
+        label: `📋 ${noteCount} 篇笔记 (展开)`,
+        icon: "panel-left-open",
+        variant: "primary",
+        title: "展开笔记列表",
+        onClick: () => this.toggleStream(false),
+      });
+    } else {
+      this.streamToggleBtn = AosUI.button(toolsEl, {
+        label: "◨ 收起列表",
+        icon: "panel-left-close",
+        variant: "secondary",
+        title: "收起笔记列表以宽屏查看图谱",
+        onClick: () => this.toggleStream(true),
+      });
+    }
   }
 
   private renderNoteStream(parent: HTMLElement, folderPath: string): void {
     const state = this.context.plugin.store.getSnapshot();
 
-    // 1. Breadcrumbs using AosUI
+    // 1. Breadcrumbs using AosUI with Collapse Drawer Action
     const { countBadgeEl } = AosUI.breadcrumbs(parent, {
       folderPath,
       countText: "… 篇",
       onSelectFolder: targetPath => this.context.selectFolder(targetPath),
+      onCollapse: () => this.toggleStream(true),
+      collapseTitle: "收起笔记列表以宽屏查看图谱",
     });
 
     // 2. Search & Filter bar using AosUI
@@ -128,15 +172,11 @@ export class AtlasPage {
           isSelected,
           onClick: () => {
             this.context.selectNode(node);
-            if (this.graphEngine === "canvas") {
-              this.canvasGraph?.setSelectedNode(node.path);
-            } else if (this.graphEngine === "native") {
-              const nativeGv = this.context.getNativeGraphView();
-              if (nativeGv && this.graphScope === "current-file") {
-                const tFile = this.context.app.vault.getAbstractFileByPath(node.path);
-                if (tFile instanceof TFile) {
-                  CompatAdapter.safeSetGraphFile(nativeGv, tFile);
-                }
+            const nativeGv = this.context.getNativeGraphView();
+            if (nativeGv && this.graphScope === "current-file") {
+              const tFile = this.context.app.vault.getAbstractFileByPath(node.path);
+              if (tFile instanceof TFile) {
+                CompatAdapter.safeSetGraphFile(nativeGv, tFile);
               }
             }
             listContainer.querySelectorAll(".aos-atlas-note-card").forEach(el => el.classList.remove("is-selected"));
@@ -186,103 +226,33 @@ export class AtlasPage {
       icon: "git-fork",
       stats: `${rawData.nodes.length} 节点 · ${rawData.edges.length} 关联`,
     });
+    this.graphToolsEl = toolsEl;
 
-    // 2. Engine Toggle Buttons using AosUI
-    AosUI.button(toolsEl, {
-      label: "✦ 原生图谱",
-      icon: "git-branch",
-      isActive: this.graphEngine === "native",
-      onClick: () => {
-        if (this.graphEngine === "native") return;
-        this.graphEngine = "native";
-        this.renderGraph(parent, folderPath);
-      },
-    });
+    // 2. Stream Drawer Toggle Button
+    this.updateStreamToggleBtn(toolsEl, folderPath);
 
-    AosUI.button(toolsEl, {
-      label: "⚡ 轻量图谱",
-      icon: "zap",
-      isActive: this.graphEngine === "canvas",
-      onClick: () => {
-        if (this.graphEngine === "canvas") return;
-        this.graphEngine = "canvas";
-        this.renderGraph(parent, folderPath);
-      },
-    });
-
-    // 3. Engine-specific Action Buttons using AosUI
-    if (this.graphEngine === "canvas") {
+    // 3. In Native mode: Scope toggle (Current Folder vs Focused File)
+    if (state.selectedFilePath) {
+      const isFileScope = this.graphScope === "current-file";
       AosUI.button(toolsEl, {
-        label: "居中复位",
-        icon: "maximize-2",
-        onClick: () => this.canvasGraph?.resetView(),
+        label: isFileScope ? "📁 目录图谱" : "🔍 焦点单篇",
+        icon: isFileScope ? "folder" : "focus",
+        isActive: isFileScope,
+        title: isFileScope ? "切换为显示整目录关系图谱" : "切换为以当前选中文档为焦点的单篇局部图谱",
+        onClick: () => {
+          this.graphScope = isFileScope ? "current-folder" : "current-file";
+          this.renderGraph(parent, folderPath);
+        },
       });
-      AosUI.button(toolsEl, {
-        label: "重新布局",
-        icon: "refresh-cw",
-        onClick: () => this.canvasGraph?.restartLayout(),
-      });
-    } else {
-      // In Native mode: Scope toggle
-      if (state.selectedFilePath) {
-        const isFileScope = this.graphScope === "current-file";
-        AosUI.button(toolsEl, {
-          label: isFileScope ? "📁 目录图谱" : "🔍 焦点单篇",
-          icon: isFileScope ? "folder" : "focus",
-          isActive: isFileScope,
-          onClick: () => {
-            this.graphScope = isFileScope ? "current-folder" : "current-file";
-            this.renderGraph(parent, folderPath);
-          },
-        });
-      }
     }
 
-    // 4. Graph Host
+    // 4. Native Obsidian Graph Canvas Host
     const canvasHost = parent.createDiv({ cls: "aos-atlas-canvas-host" });
+    const seedPath = (state.selectedFilePath && rawData.nodes.some((n: any) => n.path === state.selectedFilePath))
+      ? state.selectedFilePath
+      : (rawData.nodes[0]?.path || "");
 
-    if (this.graphEngine === "native") {
-      if (this.canvasGraph) {
-        this.canvasGraph.destroy();
-        this.canvasGraph = null;
-      }
-      const seedPath = (state.selectedFilePath && rawData.nodes.some((n: any) => n.path === state.selectedFilePath))
-        ? state.selectedFilePath
-        : (rawData.nodes[0]?.path || "");
-
-      void this.context.mountNativeGraph(canvasHost, seedPath, rawData, this.graphScope, []);
-    } else {
-      this.context.disposeNativeGraphView();
-
-      const graphData: CanvasLocalGraphData = {
-        nodes: rawData.nodes,
-        edges: rawData.edges,
-        folderName,
-      };
-
-      this.canvasGraph = new CanvasLocalGraph(canvasHost, {
-        onSelectNode: path => {
-          const node = this.context.toNode(path);
-          if (node) {
-            this.context.selectNode(node);
-            const streamList = this.containerEl?.querySelector(".aos-atlas-note-list");
-            if (streamList) {
-              streamList.querySelectorAll(".aos-atlas-note-card").forEach(c => {
-                const match = c.querySelector(".aos-atlas-card-title")?.textContent === node.title;
-                c.classList.toggle("is-selected", match);
-                if (match) c.scrollIntoView({ behavior: "smooth", block: "nearest" });
-              });
-            }
-          }
-        },
-        onOpenNode: path => {
-          const node = this.context.toNode(path);
-          if (node) void this.context.openNode(node);
-        },
-      });
-
-      this.canvasGraph.setData(graphData, state.selectedFilePath);
-    }
+    void this.context.mountNativeGraph(canvasHost, seedPath, rawData, this.graphScope, []);
   }
 
   private formatDate(timestamp: number): string {
