@@ -1,4 +1,5 @@
 :root {
+  /* Songguo Pavilion & Scriptorium Colors */
   --aos-ivory: #fbf7ee;
   --aos-paper: #f6efe1;
   --aos-paper-strong: #eee2cf;
@@ -17,11 +18,43 @@
   --aos-navy: #081827;
   --aos-navy-soft: #10263a;
   --aos-shadow: 0 14px 38px rgba(91, 64, 30, 0.08);
+  --aos-radius-xs: 4px;
   --aos-radius-sm: 8px;
   --aos-radius: 12px;
   --aos-radius-lg: 16px;
+  --aos-radius-pill: 999px;
   --aos-font-ui: "Inter", "Segoe UI", "Microsoft YaHei UI", sans-serif;
   --aos-font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+
+  /* Typography Scale */
+  --aos-text-xs: 11px;
+  --aos-text-sm: 12px;
+  --aos-text-base: 13px;
+  --aos-text-md: 14.5px;
+  --aos-text-lg: 16px;
+  --aos-text-xl: 20px;
+  --aos-text-2xl: 24px;
+
+  /* Spacing Scale */
+  --aos-space-1: 4px;
+  --aos-space-2: 8px;
+  --aos-space-3: 12px;
+  --aos-space-4: 16px;
+  --aos-space-5: 20px;
+  --aos-space-6: 24px;
+
+  /* Standard Component Metrics */
+  --aos-btn-h-sm: 26px;
+  --aos-btn-h-md: 32px;
+  --aos-btn-h-lg: 38px;
+  --aos-input-h: 32px;
+
+  /* Motion & Spring Physics */
+  --aos-ease-tactile: cubic-bezier(0.2, 0, 0, 1);
+  --aos-ease-paper: cubic-bezier(0.16, 1, 0.3, 1);
+  --aos-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --aos-dur-fast: 140ms;
+  --aos-dur-base: 220ms;
 }
 
 .theme-dark {
