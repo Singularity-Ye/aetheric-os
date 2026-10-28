@@ -27,7 +27,6 @@ import { HamasxiangOperationsService } from "./aetheric/operations/HamasxiangOpe
 import { NavigationHistoryService } from "./aetheric/NavigationHistoryService";
 import { ImageGovernanceService } from "./aetheric/ImageGovernanceService";
 
-const HAMASXIANG_VIEW = "hamasxiang-console-view";
 
 export interface DaemonProbe {
   online: boolean;
@@ -644,22 +643,6 @@ export default class ScriptoriumPlugin extends Plugin {
     await this.activateView();
     const leaf = this.app.workspace.getLeavesOfType(AETHERIC_SHELL_VIEW)[0];
     if (leaf?.view instanceof AethericShellView) leaf.view.selectFolder(folderPath);
-  }
-
-  async openHamasxiangConsole(): Promise<void> {
-    const leaves = this.app.workspace.getLeavesOfType(HAMASXIANG_VIEW);
-    let leaf: WorkspaceLeaf;
-    if (leaves.length) leaf = leaves[0];
-    else {
-      leaf = this.app.workspace.getLeaf("tab");
-      try {
-        await leaf.setViewState({ type: HAMASXIANG_VIEW, active: true });
-      } catch {
-        new Notice("蛤蟆祥控制台未启用或未安装");
-        return;
-      }
-    }
-    this.app.workspace.revealLeaf(leaf);
   }
 
   async restoreNativeUi(): Promise<void> {

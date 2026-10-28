@@ -1322,11 +1322,7 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     tasks.createDiv({ cls: "aos-panel-title", text: "当前任务快照" });
     this.renderTaskList(tasks, adapterTasks.slice(0, 4), true);
 
-    const legacy = parent.createDiv({ cls: "aos-panel aos-legacy-actions" });
-    legacy.createDiv({ cls: "aos-panel-title", text: "现有控制台能力" });
-    legacy.createDiv({ cls: "aos-panel-note", text: "集成系统常驻后台，支持进程守护与实时状态监控。" });
-    const actions = legacy.createDiv({ cls: "aos-action-row" });
-    this.actionButton(actions, "打开蛤蟆祥指挥中心", () => void this.plugin.openHamasxiangConsole());
+
   }
 
   private visibleImageGovernanceCandidates(): ImageGovernanceCandidate[] {
@@ -5390,7 +5386,6 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const actions = page.createDiv({ cls: "aos-action-row" });
     this.actionButton(actions, "刷新情报", () => this.refreshIntelligence());
     this.actionButton(actions, "立即巡逻 X", () => this.runXWatch());
-    this.actionButton(actions, "打开蛤蟆祥指挥中心", () => this.plugin.openHamasxiangConsole());
 
     const filters = page.createDiv({ cls: "aos-intelligence-filters" });
     filters.createSpan({ cls: "aos-filter-label", text: "查看范围" });
@@ -7671,7 +7666,6 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     page.createDiv({ cls: "aos-page-title", text: title });
     page.createDiv({ cls: "aos-empty-state", text: detail });
     const actions = page.createDiv({ cls: "aos-action-row" });
-    this.actionButton(actions, "打开蛤蟆祥指挥中心", () => void this.plugin.openHamasxiangConsole());
   }
 
   private refreshVirtualList(): void {
@@ -7755,8 +7749,14 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       this.switchModule("intelligence");
       return;
     }
-    if (capability.id === "cloud-sync" || capability.id === "asr-repair") {
-      void this.plugin.openHamasxiangConsole();
+    if (capability.id === "cloud-sync") {
+      this.switchModule("tasks");
+      new Notice("云端同步：已切换至任务流面板");
+      return;
+    }
+    if (capability.id === "asr-repair") {
+      this.switchModule("tasks");
+      new Notice("ASR 修复：已切换至任务流面板");
       return;
     }
     if (capability.id === "publish") {
@@ -7804,7 +7804,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       return;
     }
     if (value.startsWith("@")) {
-      this.showCommandItems([{ primary: "Agent 路由尚未接入", secondary: "不会虚构 Agent 执行；当前可在蛤蟆祥控制台使用现有能力", action: () => void this.plugin.openHamasxiangConsole() }]);
+      this.showCommandItems([{ primary: "Agent 路由尚未接入", secondary: "不会虚构 Agent 执行；当前可在蛤蟆祥控制台使用现有能力", action: () => this.switchModule("tasks") }]);
       return;
     }
     if (value.startsWith("/")) {
@@ -8200,7 +8200,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     } else if (cmd === "run-x-watch") {
       void this.runXWatch();
     } else if (cmd === "open-hamasxiang-console") {
-      void this.plugin.openHamasxiangConsole();
+      this.switchModule("tasks");
     }
   }
 
