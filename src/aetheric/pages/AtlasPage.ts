@@ -1,4 +1,4 @@
-import { App, Menu, TFile } from "obsidian";
+import { App, Menu, TFile, setIcon } from "obsidian";
 import { AosUI } from "../ui/AosUI";
 import { CompatAdapter } from "../CompatAdapter";
 import type { KnowledgeNodeViewModel } from "../types";
@@ -42,6 +42,9 @@ export class AtlasPage {
   constructor(private context: AtlasPageContext) {}
 
   mount(parent: HTMLElement, folderPath: string): void {
+    if (this.currentFolderPath !== folderPath) {
+      this.isStreamCollapsed = false;
+    }
     this.destroy();
     this.currentFolderPath = folderPath;
     this.containerEl = parent.createDiv({ cls: "aos-page aos-atlas-page" });
@@ -85,6 +88,7 @@ export class AtlasPage {
     }
     setTimeout(() => {
       this.onResize();
+      window.dispatchEvent(new Event("resize"));
     }, 240);
   }
 
@@ -111,6 +115,7 @@ export class AtlasPage {
         onClick: () => this.toggleStream(true),
       });
     }
+    toolsEl.prepend(this.streamToggleBtn);
   }
 
   private renderNoteStream(parent: HTMLElement, folderPath: string): void {
@@ -209,7 +214,7 @@ export class AtlasPage {
   private renderGraph(parent: HTMLElement, folderPath: string): void {
     parent.empty();
     const state = this.context.plugin.store.getSnapshot();
-    const folderName = folderPath.split("/").pop() || folderPath;
+    const folderName = folderPath.split("/").filter(Boolean).pop() || this.context.getWorkspace()?.name || "全库";
 
     // Scoped graph data using VaultIndexService
     const rawData = this.context.plugin.indexService.getGraphData(
@@ -219,6 +224,8 @@ export class AtlasPage {
       folderPath,
       64,
     );
+
+    const allNotesCount = this.context.plugin.indexService.listFiles(folderPath).length;
 
     // 1. Toolbar using AosUI
     const { toolsEl } = AosUI.toolbar(parent, {
@@ -231,7 +238,17 @@ export class AtlasPage {
     // 2. Stream Drawer Toggle Button
     this.updateStreamToggleBtn(toolsEl, folderPath);
 
-    // 3. In Native mode: Scope toggle (Current Folder vs Focused File)
+    // 3. Floating left-edge expand trigger when collapsed
+    const floatingExpand = parent.createEl("button", {
+      cls: "aos-atlas-stream-expand-strip",
+      attr: { "aria-label": `展开笔记列表 (${allNotesCount} 篇)`, title: "展开笔记列表" },
+    });
+    const stripIcon = floatingExpand.createSpan({ cls: "aos-atlas-strip-icon" });
+    setIcon(stripIcon, "panel-left-open");
+    floatingExpand.createSpan({ text: `展开笔记 (${allNotesCount})` });
+    floatingExpand.addEventListener("click", () => this.toggleStream(false));
+
+    // 4. In Native mode: Scope toggle (Current Folder vs Focused File)
     if (state.selectedFilePath) {
       const isFileScope = this.graphScope === "current-file";
       AosUI.button(toolsEl, {
@@ -246,7 +263,7 @@ export class AtlasPage {
       });
     }
 
-    // 4. Native Obsidian Graph Canvas Host
+    // 5. Native Obsidian Graph Canvas Host
     const canvasHost = parent.createDiv({ cls: "aos-atlas-canvas-host" });
     const seedPath = (state.selectedFilePath && rawData.nodes.some((n: any) => n.path === state.selectedFilePath))
       ? state.selectedFilePath

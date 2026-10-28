@@ -647,22 +647,89 @@
    Atlas Workbench (Unified Navigation & Knowledge Graph)
    ========================================================================== */
 .aos-atlas-page {
-  display: grid;
-  grid-template-columns: minmax(280px, 340px) 1fr;
+  display: flex !important;
+  flex-direction: row !important;
   height: 100%;
   width: 100%;
   overflow: hidden;
   background: var(--aos-surface);
   position: relative;
-  transition: grid-template-columns 220ms var(--aos-ease-paper, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
-.aos-atlas-page.is-stream-collapsed {
-  grid-template-columns: 0px 1fr;
+.aos-atlas-stream {
+  width: clamp(280px, 22vw, 340px);
+  min-width: 280px;
+  max-width: 360px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--aos-border);
+  background: var(--aos-surface);
+  min-height: 0;
+  overflow: hidden;
+  transition: width 220ms var(--aos-ease-paper, cubic-bezier(0.4, 0, 0.2, 1)),
+              min-width 220ms var(--aos-ease-paper, cubic-bezier(0.4, 0, 0.2, 1)),
+              opacity 180ms ease;
+}
+
+.aos-atlas-graph {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  position: relative !important;
+  background: var(--aos-surface) !important;
 }
 
 .aos-atlas-page.is-stream-collapsed .aos-atlas-stream {
+  width: 0px !important;
+  min-width: 0px !important;
+  max-width: 0px !important;
+  border-right: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
   display: none !important;
+}
+
+.aos-atlas-page.is-stream-collapsed .aos-atlas-graph {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+}
+
+.aos-atlas-stream-expand-strip {
+  position: absolute;
+  left: 12px;
+  top: 54px;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px !important;
+  background: var(--aos-paper, #ffffff) !important;
+  color: var(--aos-gold-dark, #a96f17) !important;
+  border: 1px solid var(--aos-gold-soft, rgba(169, 111, 23, 0.35)) !important;
+  border-radius: 999px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(169, 111, 23, 0.18) !important;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.aos-atlas-stream-expand-strip:hover {
+  transform: translateY(-1px) scale(1.03);
+  background: rgba(169, 111, 23, 0.08) !important;
+  box-shadow: 0 6px 18px rgba(169, 111, 23, 0.25) !important;
+}
+.aos-atlas-stream-expand-strip svg {
+  width: 14px;
+  height: 14px;
+}
+.aos-atlas-page.is-stream-collapsed .aos-atlas-stream-expand-strip {
+  display: inline-flex !important;
 }
 
 .aos-crumb-collapse-btn {
