@@ -342,6 +342,8 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
   private inboxGraphRuntime: ForceGraphRuntime | null = null;
   private canvasGraph: CanvasLocalGraph | null = null;
   private atlasFilterQuery = "";
+  private atlasGraphEngine: "native" | "canvas" = "native";
+  private atlasGraphScope: "current-folder" | "current-file" = "current-folder";
   private graphEdgeLabelMode: ForceGraphEdgeLabelMode = "explore";
   private relationNodeBudget = DEFAULT_RELATION_NODE_BUDGET;
   private nativeGraphView: any = null;
@@ -3779,7 +3781,16 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
 
         card.addEventListener("click", () => {
           this.selectNode(node);
-          this.canvasGraph?.setSelectedNode(node.path);
+          if (this.atlasGraphEngine === "canvas") {
+            this.canvasGraph?.setSelectedNode(node.path);
+          } else if (this.atlasGraphEngine === "native" && this.nativeGraphView) {
+            if (this.atlasGraphScope === "current-file") {
+              const tFile = this.app.vault.getAbstractFileByPath(node.path);
+              if (tFile instanceof TFile) {
+                CompatAdapter.safeSetGraphFile(this.nativeGraphView, tFile);
+              }
+            }
+          }
           listContainer.querySelectorAll(".aos-atlas-note-card").forEach(el => el.classList.remove("is-selected"));
           card.classList.add("is-selected");
         });
@@ -3825,8 +3836,18 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
   }
 
   private renderAtlasCanvasGraph(parent: HTMLElement, folderPath: string): void {
+    parent.empty();
     const state = this.plugin.store.getSnapshot();
     const folderName = folderPath.split("/").pop() || folderPath;
+
+    // Scoped graph data using our fixed VaultIndexService
+    const rawData = this.plugin.indexService.getGraphData(
+      state.selectedFilePath,
+      "current-folder",
+      this.getWorkspace(),
+      folderPath,
+      64,
+    );
 
     // Graph Toolbar
     const toolbar = parent.createDiv({ cls: "aos-atlas-graph-toolbar" });
@@ -3836,58 +3857,104 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     info.createSpan({ cls: "aos-atlas-folder-title", text: `局部关系图谱 · ${folderName}` });
 
     const tools = toolbar.createDiv({ cls: "aos-atlas-graph-tools" });
-    const resetBtn = tools.createEl("button", { cls: "aos-graph-btn", text: "居中复位" });
-    this.decorateGraphButton(resetBtn, "maximize-2");
-    resetBtn.addEventListener("click", () => this.canvasGraph?.resetView());
 
-    const relayoutBtn = tools.createEl("button", { cls: "aos-graph-btn", text: "重新布局" });
-    this.decorateGraphButton(relayoutBtn, "refresh-cw");
-    relayoutBtn.addEventListener("click", () => this.canvasGraph?.restartLayout());
+    // Mode Toggle: Native vs Canvas
+    const nativeBtn = tools.createEl("button", {
+      cls: `aos-graph-native-btn ${this.atlasGraphEngine === "native" ? "is-active" : ""}`,
+      text: "✦ 原生图谱",
+    });
+    this.decorateGraphButton(nativeBtn, "git-branch");
+    nativeBtn.addEventListener("click", () => {
+      if (this.atlasGraphEngine === "native") return;
+      this.atlasGraphEngine = "native";
+      this.renderAtlasCanvasGraph(parent, folderPath);
+    });
+
+    const canvasBtn = tools.createEl("button", {
+      cls: `aos-graph-native-btn ${this.atlasGraphEngine === "canvas" ? "is-active" : ""}`,
+      text: "⚡ 轻量图谱",
+    });
+    this.decorateGraphButton(canvasBtn, "zap");
+    canvasBtn.addEventListener("click", () => {
+      if (this.atlasGraphEngine === "canvas") return;
+      this.atlasGraphEngine = "canvas";
+      this.renderAtlasCanvasGraph(parent, folderPath);
+    });
+
+    // Engine-specific tools
+    if (this.atlasGraphEngine === "canvas") {
+      const resetBtn = tools.createEl("button", { cls: "aos-graph-native-btn", text: "居中复位" });
+      this.decorateGraphButton(resetBtn, "maximize-2");
+      resetBtn.addEventListener("click", () => this.canvasGraph?.resetView());
+
+      const relayoutBtn = tools.createEl("button", { cls: "aos-graph-native-btn", text: "重新布局" });
+      this.decorateGraphButton(relayoutBtn, "refresh-cw");
+      relayoutBtn.addEventListener("click", () => this.canvasGraph?.restartLayout());
+    } else {
+      // In native mode: Scope toggle (folder vs local file)
+      if (state.selectedFilePath) {
+        const isFileScope = this.atlasGraphScope === "current-file";
+        const scopeToggleBtn = tools.createEl("button", {
+          cls: `aos-graph-native-btn ${isFileScope ? "is-active" : ""}`,
+          text: isFileScope ? "📁 目录图谱" : "🔍 焦点单篇",
+        });
+        this.decorateGraphButton(scopeToggleBtn, isFileScope ? "folder" : "focus");
+        scopeToggleBtn.addEventListener("click", () => {
+          this.atlasGraphScope = isFileScope ? "current-folder" : "current-file";
+          this.renderAtlasCanvasGraph(parent, folderPath);
+        });
+      }
+    }
+
+    // Stats indicator
+    const stats = toolbar.createDiv({ cls: "aos-atlas-graph-stats" });
+    stats.textContent = `${rawData.nodes.length} 节点 · ${rawData.edges.length} 关联`;
 
     // Canvas Host
     const canvasHost = parent.createDiv({ cls: "aos-atlas-canvas-host" });
 
-    // Scoped graph data using our fixed VaultIndexService!
-    const rawData = this.plugin.indexService.getGraphData(
-      state.selectedFilePath,
-      "current-folder",
-      this.getWorkspace(),
-      folderPath,
-      64,
-    );
+    if (this.atlasGraphEngine === "native") {
+      if (this.canvasGraph) {
+        this.canvasGraph.destroy();
+        this.canvasGraph = null;
+      }
+      const seedPath = (state.selectedFilePath && rawData.nodes.some(n => n.path === state.selectedFilePath))
+        ? state.selectedFilePath
+        : (rawData.nodes[0]?.path || "");
 
-    const graphData: CanvasLocalGraphData = {
-      nodes: rawData.nodes,
-      edges: rawData.edges,
-      folderName,
-    };
+      void this.mountNativeGraph(canvasHost, seedPath, rawData, this.atlasGraphScope, []);
+    } else {
+      this.disposeNativeGraphView();
 
-    // Stats indicator
-    const stats = toolbar.createDiv({ cls: "aos-atlas-graph-stats" });
-    stats.textContent = `${graphData.nodes.length} 节点 · ${graphData.edges.length} 关联`;
+      const graphData: CanvasLocalGraphData = {
+        nodes: rawData.nodes,
+        edges: rawData.edges,
+        folderName,
+      };
 
-    this.canvasGraph = new CanvasLocalGraph(canvasHost, {
-      onSelectNode: (path) => {
-        const node = this.toNode(path);
-        if (node) {
-          this.selectNode(node);
-          const streamList = this.mainPane.querySelector(".aos-atlas-note-list");
-          if (streamList) {
-            streamList.querySelectorAll(".aos-atlas-note-card").forEach(c => {
-              const match = c.querySelector(".aos-atlas-card-title")?.textContent === node.title;
-              c.classList.toggle("is-selected", match);
-              if (match) c.scrollIntoView({ behavior: "smooth", block: "nearest" });
-            });
+      this.canvasGraph = new CanvasLocalGraph(canvasHost, {
+        onSelectNode: (path) => {
+          const node = this.toNode(path);
+          if (node) {
+            this.selectNode(node);
+            const streamList = this.mainPane.querySelector(".aos-atlas-note-list");
+            if (streamList) {
+              streamList.querySelectorAll(".aos-atlas-note-card").forEach(c => {
+                const match = c.querySelector(".aos-atlas-card-title")?.textContent === node.title;
+                c.classList.toggle("is-selected", match);
+                if (match) c.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              });
+            }
           }
-        }
-      },
-      onOpenNode: (path) => {
-        const node = this.toNode(path);
-        if (node) void this.openNode(node);
-      },
-    });
+        },
+        onOpenNode: (path) => {
+          const node = this.toNode(path);
+          if (node) void this.openNode(node);
+        },
+      });
 
-    this.canvasGraph.setData(graphData, state.selectedFilePath);
+      this.canvasGraph.setData(graphData, state.selectedFilePath);
+    }
   }
 
   private renderNavigation(): void {
