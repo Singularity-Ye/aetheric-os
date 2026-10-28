@@ -87,6 +87,194 @@
   transform: scale(1.1);
 }
 
+.aos-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-inline: 4px;
+}
+.aos-section-header .aos-nav-section-title {
+  margin: 0;
+}
+
+/* Pinned Folders Chips */
+.aos-pinned-section {
+  margin: 10px 0 14px;
+}
+.aos-pinned-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+}
+.aos-pinned-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--aos-border);
+  border-radius: var(--aos-radius-sm, 6px);
+  background: var(--aos-surface);
+  color: var(--aos-ink);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  user-select: none;
+}
+.aos-pinned-chip:hover {
+  border-color: var(--aos-gold-soft);
+  background: var(--aos-surface-hover, var(--aos-surface));
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(169, 111, 23, 0.12);
+}
+.aos-pinned-chip.is-active {
+  border-color: var(--aos-gold);
+  background: linear-gradient(135deg, rgba(169, 111, 23, 0.15), var(--aos-surface));
+  box-shadow: 0 0 0 1px var(--aos-gold), 0 2px 6px rgba(169, 111, 23, 0.15);
+  font-weight: 700;
+}
+.aos-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--aos-gold);
+  width: 14px;
+  height: 14px;
+}
+.aos-chip-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.aos-chip-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--aos-ink);
+  white-space: nowrap;
+}
+.aos-chip-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: rgba(169, 111, 23, 0.1);
+  color: var(--aos-gold-dark, #a96f17);
+  line-height: 1.2;
+}
+.aos-empty-hint {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--aos-ink-muted);
+  border: 1px dashed var(--aos-border);
+  border-radius: var(--aos-radius-sm, 6px);
+  text-align: center;
+  width: 100%;
+}
+
+/* Vault Pillars & Schools Tree */
+.aos-pillars-section {
+  margin: 14px 0;
+}
+.aos-pillars-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.aos-pillar-row {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  padding-left: calc(var(--aos-folder-depth, 0) * 14px + 6px);
+  border-radius: var(--aos-radius-sm, 6px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.aos-pillar-row:hover {
+  background: rgba(169, 111, 23, 0.06);
+}
+.aos-pillar-row.is-selected {
+  background: rgba(169, 111, 23, 0.12);
+  color: var(--aos-gold-dark, #a96f17);
+  font-weight: 700;
+}
+.aos-pillar-row.is-pillar {
+  font-weight: 700;
+  margin-top: 4px;
+  background: rgba(169, 111, 23, 0.03);
+  border: 1px solid rgba(169, 111, 23, 0.08);
+}
+.aos-pillar-row.is-pillar:hover {
+  background: rgba(169, 111, 23, 0.08);
+  border-color: rgba(169, 111, 23, 0.2);
+}
+.aos-pillar-toggle {
+  width: 18px;
+  height: 18px;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--aos-ink-muted) !important;
+  box-shadow: none !important;
+  font-size: 11px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.aos-pillar-toggle:hover {
+  background: rgba(169, 111, 23, 0.12) !important;
+  color: var(--aos-gold) !important;
+}
+.aos-pillar-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--aos-gold);
+  flex-shrink: 0;
+}
+.aos-pillar-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.aos-pillar-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--aos-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aos-pillar-row.is-selected .aos-pillar-label {
+  color: var(--aos-gold-dark, #a96f17);
+  font-weight: 700;
+}
+.aos-pillar-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: rgba(169, 111, 23, 0.08);
+  color: var(--aos-ink-muted);
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+.aos-pillar-pinned-star {
+  font-size: 10px;
+  color: var(--aos-gold);
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
 .aos-nav-card, .aos-quick-button {
   width: 100%;
   min-height: 44px;
@@ -97,7 +285,7 @@
   gap: 10px;
   border: 1px solid var(--aos-border-muted) !important;
   border-radius: var(--aos-radius) !important;
-  background: #ffffff !important;
+  background: var(--aos-surface) !important;
   color: var(--aos-ink) !important;
   box-shadow: var(--aos-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.05)) !important;
   text-align: left;
@@ -112,7 +300,7 @@
 }
 .aos-nav-card.is-active {
   border-color: var(--aos-gold) !important;
-  background: linear-gradient(135deg, rgba(169, 111, 23, 0.04), #ffffff) !important;
+  background: linear-gradient(135deg, rgba(169, 111, 23, 0.08), var(--aos-surface)) !important;
   box-shadow: inset 3px 0 0 var(--aos-gold), 0 4px 12px rgba(169, 111, 23, 0.08) !important;
 }
 

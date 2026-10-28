@@ -182,7 +182,7 @@ export interface ScriptoriumSettings {
 }
 
 export const DEFAULT_SETTINGS: ScriptoriumSettings = {
-  schemaVersion: 8,
+  schemaVersion: 9,
   personalBlogPath: "d:\\Yhx06\\Documents\\仙术工坊——项目集\\个人博客网站-松果阁\\personal-blog",
   autoOpenShell: true,
   nativeUiHidden: true,
@@ -222,6 +222,15 @@ export function mergeSettings(raw: Partial<ScriptoriumSettings> | null | undefin
   // `true` came from the former unsafe default, so it must not survive the
   // migration as apparent user consent.
   if (!raw?.schemaVersion || raw.schemaVersion < 7) imageGovernance.autoCompress = false;
+  // v9 migrates default workspaces and ensures favoriteFolderPaths are populated
+  if (!raw?.schemaVersion || raw.schemaVersion < 9) {
+    if (!shellState.favoriteFolderPaths || shellState.favoriteFolderPaths.length === 0) {
+      shellState.favoriteFolderPaths = [...(DEFAULT_SHELL_STATE.favoriteFolderPaths ?? [])];
+    }
+    if (!shellState.expandedFolderPaths || shellState.expandedFolderPaths.length === 0) {
+      shellState.expandedFolderPaths = [...(DEFAULT_SHELL_STATE.expandedFolderPaths ?? [])];
+    }
+  }
   return {
     ...structuredClone(DEFAULT_SETTINGS),
     ...(raw ?? {}),

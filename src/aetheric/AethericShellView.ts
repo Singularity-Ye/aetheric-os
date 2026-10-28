@@ -1043,7 +1043,8 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     }
     const text = workspaceCard.createDiv();
     text.createDiv({ cls: "aos-workspace-name", text: workspace.name });
-    text.createDiv({ cls: "aos-workspace-desc", text: "工作域 · 项目 · 能力 · 知识节点" });
+    const noteCount = this.plugin.indexService.getFileCount(workspace);
+    text.createDiv({ cls: "aos-workspace-desc", text: `${noteCount} 篇知识笔记 · 圣地知识流` });
 
     if (state.navigatorMode === "collapsed") {
       for (const item of this.plugin.settings.workspaces) {
@@ -1060,56 +1061,229 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
       return;
     }
 
-    this.renderNavigatorSection("Projects", workspace.projects.map(project => ({
-      title: project.name,
-      meta: project.status ?? "项目",
-      action: () => this.selectProject(project.id, project.rootPath),
-      active: state.selectedProjectId === project.id,
-    })));
-
-    this.renderNavigatorSection("Capabilities", workspace.capabilities.map(capability => ({
-      title: capability.name,
-      meta: capability.description ?? "长期能力",
-      action: () => this.activateCapability(capability),
-    })));
-
-    const quick = this.navigator.createDiv({ cls: "aos-nav-section" });
-    const quickHeader = quick.createDiv({ cls: "aos-quick-header" });
-    quickHeader.createDiv({ cls: "aos-nav-section-title", text: "Quick Access" });
-    const addFolderBtn = quickHeader.createEl("button", {
+    // 1. Pinned Folders (★ 常用置顶目录)
+    const pinnedSection = this.navigator.createDiv({ cls: "aos-nav-section aos-pinned-section" });
+    const pinnedHeader = pinnedSection.createDiv({ cls: "aos-section-header" });
+    pinnedHeader.createDiv({ cls: "aos-nav-section-title", text: "★ 常用置顶目录" });
+    const addPinBtn = pinnedHeader.createEl("button", {
       cls: "aos-quick-add-btn",
       text: "+",
-      attr: { title: "添加快捷目录" },
+      attr: { title: "添加置顶目录" },
     });
-    addFolderBtn.addEventListener("click", () => this.promptAddFolder());
+    addPinBtn.addEventListener("click", () => this.promptAddFolder());
+
+    const pinnedChips = pinnedSection.createDiv({ cls: "aos-pinned-chips" });
+    const favoriteFolderPaths = state.favoriteFolderPaths || [];
+    if (favoriteFolderPaths.length === 0) {
+      pinnedChips.createDiv({ cls: "aos-empty-hint", text: "右键目录可固定至常用置顶" });
+    } else {
+      for (const folderPath of favoriteFolderPaths) {
+        this.renderPinnedFolderChip(pinnedChips, folderPath, state.selectedFolderPath === folderPath);
+      }
+    }
+
+    // 2. Pillars & Schools Tree (🏛️ 松果阁四大圣地体系)
+    const pillarsSection = this.navigator.createDiv({ cls: "aos-nav-section aos-pillars-section" });
+    const pillarsHeader = pillarsSection.createDiv({ cls: "aos-section-header" });
+    pillarsHeader.createDiv({ cls: "aos-nav-section-title", text: "🏛️ 松果阁体系" });
+
+    const treeContainer = pillarsSection.createDiv({ cls: "aos-pillars-tree" });
+    const expandedSet = new Set(state.expandedFolderPaths);
+
+    for (const rootPath of workspace.rootPaths) {
+      const folder = this.plugin.indexService.getFolder(rootPath);
+      if (folder) {
+        this.renderPillarNode(treeContainer, folder, 0, expandedSet, state.selectedFolderPath);
+      }
+    }
+
+    // 3. Quick Tools (⚡ 快捷工具)
+    const quick = this.navigator.createDiv({ cls: "aos-nav-section aos-quick-section" });
+    const quickHeader = quick.createDiv({ cls: "aos-section-header" });
+    quickHeader.createDiv({ cls: "aos-nav-section-title", text: "⚡ 快捷工具" });
+
     const recentButton = this.renderQuickButton(quick, "最近访问", `${state.recentFilePaths.length}`, "history", () => this.showRecentFiles());
     recentButton.dataset.aosQuick = "recent";
     this.renderQuickButton(quick, "收藏节点", `${state.favoritePaths.length}`, "star", () => this.showFavoriteFiles());
-    if (state.favoriteFolderPaths && state.favoriteFolderPaths.length > 0) {
-      for (const folderPath of state.favoriteFolderPaths) {
-        const folderName = folderPath.split("/").pop() || folderPath;
-        const btn = this.renderQuickButton(quick, folderName, "", "folder", () => this.selectFolder(folderPath));
-        btn.addEventListener("contextmenu", event => {
-          event.preventDefault();
-          event.stopPropagation();
-          const menu = new Menu();
-          menu.addItem(item => {
-            item.setTitle("★ 从快捷访问移除")
-              .setIcon("star-off")
-              .onClick(() => this.toggleFavoriteFolder(folderPath));
-          });
-          menu.showAtPosition({ x: event.clientX, y: event.clientY });
-        });
+    this.renderQuickButton(quick, "灵感待炼", `${this.getInspirationFiles().length}`, "lightbulb", () => this.switchModule("inspiration"));
+    this.renderQuickButton(
+      quick,
+      state.folderTreeVisible ? "收起全库目录树" : "浏览全库目录树",
+      "",
+      "folder-tree",
+      () => {
+        this.plugin.store.patch({ folderTreeVisible: !state.folderTreeVisible });
+        this.renderNavigator();
       }
+    );
+
+    if (state.folderTreeVisible) {
+      this.renderFullVaultFolderTree();
     }
-    if (workspace.inboxPath) this.renderQuickButton(quick, "收件箱", "", "inbox", () => this.selectFolder(workspace.inboxPath!));
-    this.renderQuickButton(quick, "灵感", `${this.getInspirationFiles().length}`, "lightbulb", () => this.switchModule("inspiration"));
-    this.renderQuickButton(quick, state.folderTreeVisible ? "收起物理目录" : "浏览物理目录", "", "folder-tree", () => {
-      this.plugin.store.patch({ folderTreeVisible: !state.folderTreeVisible });
+  }
+
+  private getFolderIcon(folderName: string, folderPath: string): string {
+    const lower = `${folderName} ${folderPath}`.toLowerCase();
+    if (lower.includes("微信") || lower.includes("weixin")) return "message-square";
+    if (lower.includes("x情报") || lower.includes("推特") || lower.includes("twitter")) return "rss";
+    if (lower.includes("b站") || lower.includes("bilibili") || lower.includes("映卷")) return "tv";
+    if (lower.includes("小红书") || lower.includes("redbook")) return "bookmark";
+    if (lower.includes("技艺") || lower.includes("工具") || lower.includes("practical")) return "wrench";
+    if (lower.includes("思辨") || lower.includes("手札") || lower.includes("屋主")) return "sparkles";
+    if (lower.includes("刀笔") || lower.includes("锐评")) return "pen-tool";
+    if (lower.includes("博物") || lower.includes("科普")) return "compass";
+    if (lower.includes("格物") || lower.includes("学术") || lower.includes("课程")) return "graduation-cap";
+    if (lower.includes("天工台") || lower.includes("aetheric") || lower.includes("丹炉")) return "flame";
+    if (lower.includes("蛤蟆祥") || lower.includes("frog")) return "frog";
+    if (lower.includes("博客") || lower.includes("blog")) return "globe";
+    if (lower.includes("食味") || lower.includes("美食")) return "utensils";
+    if (lower.includes("行路") || lower.includes("旅行")) return "map-pin";
+    if (lower.includes("游艺") || lower.includes("游戏") || lower.includes("bg3")) return "gamepad-2";
+    if (lower.includes("松果池") || lower.includes("收件箱") || lower.includes("inbox")) return "inbox";
+    if (lower.includes("藏经阁")) return "book-open";
+    if (lower.includes("生活簿")) return "coffee";
+    return "folder";
+  }
+
+  private renderPinnedFolderChip(parent: HTMLElement, folderPath: string, isActive: boolean): void {
+    const chip = parent.createDiv({ cls: "aos-pinned-chip" });
+    chip.classList.toggle("is-active", isActive);
+
+    const folderName = folderPath.split("/").pop() || folderPath;
+    const iconName = this.getFolderIcon(folderName, folderPath);
+    const iconEl = chip.createSpan({ cls: "aos-chip-icon" });
+    setIcon(iconEl, iconName);
+
+    const titleEl = chip.createSpan({ cls: "aos-chip-title", text: folderName });
+    titleEl.setAttribute("title", folderPath);
+
+    const fileCount = this.plugin.indexService.listFiles(folderPath).length;
+    if (fileCount > 0) {
+      chip.createSpan({ cls: "aos-chip-badge", text: `${fileCount}` });
+    }
+
+    chip.addEventListener("click", () => this.selectFolder(folderPath));
+    chip.addEventListener("contextmenu", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const menu = new Menu();
+      menu.addItem(item => {
+        item.setTitle("★ 从常用置顶移除")
+          .setIcon("star-off")
+          .onClick(() => this.toggleFavoriteFolder(folderPath));
+      });
+      menu.addItem(item => {
+        item.setTitle("在此目录新建笔记")
+          .setIcon("file-plus-2")
+          .onClick(() => {
+            this.selectFolder(folderPath);
+            void this.openNoteEditorModal();
+          });
+      });
+      menu.showAtPosition({ x: event.clientX, y: event.clientY });
+    });
+  }
+
+  private renderPillarNode(
+    parent: HTMLElement,
+    folder: TFolder,
+    depth: number,
+    expanded: Set<string>,
+    selectedFolderPath: string,
+  ): void {
+    const isExpanded = expanded.has(folder.path);
+    const children = this.plugin.indexService.getChildFolders(folder.path);
+    const isSelected = selectedFolderPath === folder.path;
+    const isPillar = depth === 0;
+
+    const row = parent.createDiv({ cls: `aos-pillar-row depth-${depth}` });
+    row.classList.toggle("is-pillar", isPillar);
+    row.classList.toggle("is-selected", isSelected);
+    row.style.setProperty("--aos-folder-depth", `${depth}`);
+
+    const toggle = row.createEl("button", {
+      cls: "aos-pillar-toggle",
+      text: children.length ? (isExpanded ? "⌄" : "›") : "·",
+    });
+    toggle.disabled = children.length === 0;
+    toggle.addEventListener("click", event => {
+      event.stopPropagation();
+      const next = new Set(this.plugin.store.getSnapshot().expandedFolderPaths);
+      if (next.has(folder.path)) next.delete(folder.path);
+      else next.add(folder.path);
+      this.plugin.store.patch({ expandedFolderPaths: [...next] });
       this.renderNavigator();
     });
 
-    if (state.activeModule === "navigation" && state.folderTreeVisible) this.renderFolderTree(workspace);
+    const iconSpan = row.createSpan({ cls: "aos-pillar-icon" });
+    const iconName = this.getFolderIcon(folder.name, folder.path);
+    setIcon(iconSpan, iconName);
+
+    const label = row.createSpan({ cls: "aos-pillar-label", text: folder.name });
+    label.setAttribute("title", folder.path);
+
+    const fileCount = this.plugin.indexService.listFiles(folder.path).length;
+    if (fileCount > 0) {
+      row.createSpan({ cls: "aos-pillar-badge", text: `${fileCount}` });
+    }
+
+    const favoriteFolderPaths = this.plugin.store.getSnapshot().favoriteFolderPaths || [];
+    const isFav = favoriteFolderPaths.includes(folder.path);
+    if (isFav) {
+      const star = row.createSpan({ cls: "aos-pillar-pinned-star", text: "★" });
+      star.setAttribute("title", "已置顶到常用");
+    }
+
+    row.addEventListener("click", () => this.selectFolder(folder.path));
+
+    row.addEventListener("contextmenu", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const menu = new Menu();
+      menu.addItem(item => {
+        item.setTitle(isFav ? "★ 从常用置顶移除" : "★ 固定到常用置顶")
+          .setIcon(isFav ? "star-off" : "star")
+          .onClick(() => this.toggleFavoriteFolder(folder.path));
+      });
+      if (children.length > 0) {
+        menu.addItem(item => {
+          item.setTitle(isExpanded ? "收起子目录" : "展开子目录")
+            .setIcon("folder")
+            .onClick(() => {
+              const next = new Set(this.plugin.store.getSnapshot().expandedFolderPaths);
+              if (next.has(folder.path)) next.delete(folder.path);
+              else next.add(folder.path);
+              this.plugin.store.patch({ expandedFolderPaths: [...next] });
+              this.renderNavigator();
+            });
+        });
+      }
+      menu.addItem(item => {
+        item.setTitle("在此目录新建笔记")
+          .setIcon("file-plus-2")
+          .onClick(() => {
+            this.selectFolder(folder.path);
+            void this.openNoteEditorModal();
+          });
+      });
+      menu.showAtPosition({ x: event.clientX, y: event.clientY });
+    });
+
+    if (isExpanded && children.length > 0) {
+      for (const child of children) {
+        this.renderPillarNode(parent, child, depth + 1, expanded, selectedFolderPath);
+      }
+    }
+  }
+
+  private renderFullVaultFolderTree(): void {
+    const section = this.navigator.createDiv({ cls: "aos-folder-section" });
+    section.createDiv({ cls: "aos-nav-section-title", text: "全库物理目录 · 按需展开" });
+    const topFolders = this.plugin.indexService.getChildFolders("");
+    const expanded = new Set(this.plugin.store.getSnapshot().expandedFolderPaths);
+    for (const folder of topFolders) {
+      this.renderFolderBranch(section, folder, 0, expanded);
+    }
   }
 
   private renderNavigatorSection(

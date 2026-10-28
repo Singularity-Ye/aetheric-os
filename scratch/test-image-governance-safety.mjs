@@ -57,7 +57,7 @@ const {
   mergeSettings,
   normalizeImageGovernanceHistory,
 } = settingsCompiled.exports;
-assert.equal(DEFAULT_SETTINGS.schemaVersion, 8);
+assert.equal(DEFAULT_SETTINGS.schemaVersion, 9);
 assert.equal(DEFAULT_IMAGE_GOVERNANCE.autoCompress, false);
 assert.equal(DEFAULT_IMAGE_GOVERNANCE.minBytes, 192 * 1024);
 assert.equal(mergeSettings(null).imageGovernance.autoCompress, false);
