@@ -6203,28 +6203,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
   }
 
   private renderKnowledgeGraph(): void {
-    // An explicit navigation/action should win over a pending index burst.
     this.cancelKnowledgeGraphRefresh();
-    this.applyGraphModuleState(normalizeGraphModuleState(
-      this.currentGraphModuleState(),
-      this.graphModuleContext(),
-    ));
-    if (this.knowledgeLens === "inbox") {
-      this.renderInboxGraph();
-      return;
-    }
-    if (this.knowledgeLens === "relation") {
-      this.renderRelationshipKnowledgeGraph();
-      return;
-    }
-    // The local-file lens remains a native graph because it is intentionally
-    // about direct backlinks. Broader scopes start with the readable semantic
-    // map; the native full graph is still available as an explicit comparison.
-    if (this.graphScope === "current-file") {
-      this.renderNativeKnowledgeGraph();
-      return;
-    }
-    this.renderSemanticKnowledgeGraph();
+    this.renderKnowledgeAtlas();
   }
 
   /**
@@ -6995,6 +6975,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
   }
 
   private renderSemanticKnowledgeGraph(): void {
+    this.renderKnowledgeAtlas();
+    return;
     this.currentRenderId += 1;
     this.disposeInboxGraphRuntime();
     this.disposeNativeGraphView();
@@ -7006,7 +6988,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const workspace = this.getWorkspace();
     const selectedFilePath = this.selectedNode?.path ?? state.selectedFilePath ?? null;
     const selectedTags = selectedFilePath
-      ? (this.plugin.indexService.getIndexedFile(selectedFilePath)?.tags ?? [])
+      ? (this.plugin.indexService.getIndexedFile(selectedFilePath as string)?.tags ?? [])
       : [];
     const folderPath = this.effectiveGraphFolderPath(state.selectedFolderPath);
     const rawData = this.plugin.indexService.getGraphData(
@@ -7031,7 +7013,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     this.renderGraphCompactToolbar(
       page,
       "native",
-      this.semanticGraphFolderPath,
+      this.semanticGraphFolderPath || folderPath,
       selectedFilePath,
       selectedTags,
     );
