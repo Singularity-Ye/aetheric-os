@@ -5185,6 +5185,11 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
    Visual Harmony & Aesthetic Refinement
    ========================================================================== */
 
+/* ==========================================================================
+   Aetheric Hermes Agent Workbench (Dual-Pane Operating Deck)
+   Visual Harmony & Aesthetic Refinement (V2 - Song Dynasty Ivory & Gold)
+   ========================================================================== */
+
 .aos-hermes-workbench {
   display: flex;
   width: 100%;
@@ -5211,10 +5216,10 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
 }
 
 .aos-hermes-sidebar-header {
-  padding: 14px 14px 10px;
+  padding: 12px 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
   border-bottom: 1px solid var(--aos-border, rgba(171, 118, 42, 0.14));
 }
 
@@ -5251,7 +5256,7 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   background: linear-gradient(180deg, #fffdf8 0%, #f7eedc 100%);
   color: var(--aos-gold, #9e6414);
   font-weight: 700;
-  font-size: 12.5px;
+  font-size: 12px;
   border: 1px solid rgba(171, 118, 42, 0.32);
   border-radius: 8px;
   cursor: pointer;
@@ -5267,7 +5272,6 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
 }
 .aos-hermes-new-btn:active {
   background: linear-gradient(180deg, #f3e6cf 0%, #fbf3e5 100%);
-  border-color: rgba(171, 118, 42, 0.45);
   box-shadow: inset 0 1px 3px rgba(91, 64, 30, 0.12);
   transform: translateY(0.5px) scale(0.99);
 }
@@ -5284,50 +5288,58 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   stroke-width: 2.2;
 }
 
-/* 1.2 搜索框 (Recessed Capsule Container) */
+/* 1.2 搜索框：彻底杜绝图标与文本重叠的 Flexbox 布局 */
 .aos-hermes-search-wrap {
-  display: flex;
-  align-items: center;
-  position: relative;
-  width: 100%;
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  width: 100% !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+  background: rgba(255, 252, 245, 0.82) !important;
+  border: 1px solid rgba(171, 118, 42, 0.22) !important;
+  border-radius: 7px !important;
+  box-sizing: border-box !important;
+  position: static !important;
+  transition: all 0.16s ease !important;
+}
+.aos-hermes-search-wrap:focus-within {
+  background: #ffffff !important;
+  border-color: rgba(171, 118, 42, 0.48) !important;
+  box-shadow: 0 0 0 2px rgba(171, 118, 42, 0.12) !important;
 }
 .aos-hermes-search-icon {
-  position: absolute;
-  left: 9px;
-  color: var(--aos-gold, #a96f17);
-  opacity: 0.65;
-  pointer-events: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 13px;
-  height: 13px;
+  position: static !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 14px !important;
+  height: 14px !important;
+  color: var(--aos-gold, #a96f17) !important;
+  opacity: 0.75 !important;
+  flex-shrink: 0 !important;
 }
 .aos-hermes-search-icon svg {
-  width: 13px;
-  height: 13px;
-  stroke-width: 2;
+  width: 14px !important;
+  height: 14px !important;
+  stroke-width: 2 !important;
 }
 .aos-hermes-search {
-  width: 100%;
-  height: 30px;
-  padding: 0 10px 0 29px;
-  font-size: 11.5px;
-  border: 1px solid rgba(171, 118, 42, 0.2);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.6);
-  outline: none;
-  color: var(--aos-ink, #342c25);
-  box-sizing: border-box;
-  transition: all 0.16s ease;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: 11.5px !important;
+  line-height: 32px !important;
+  color: var(--aos-ink, #342c25) !important;
 }
 .aos-hermes-search::placeholder {
-  color: rgba(118, 107, 96, 0.65);
-}
-.aos-hermes-search:focus {
-  background: #ffffff;
-  border-color: rgba(171, 118, 42, 0.45);
-  box-shadow: 0 0 0 2.5px rgba(171, 118, 42, 0.1);
+  color: rgba(118, 107, 96, 0.65) !important;
 }
 
 /* 1.3 分段控制器 (Segmented Control Pill Tabs) */
@@ -5460,7 +5472,7 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
 }
 
 /* --------------------------------------------------------------------------
-   AREA 2: Top Header Bar & Ghost Actions
+   AREA 2: Top Header Bar & Deck Actions (图四风格：象牙白金玉卡片)
    -------------------------------------------------------------------------- */
 .aos-hermes-main {
   flex: 1;
@@ -5469,11 +5481,12 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   overflow: hidden;
   background: var(--aos-ivory, #fbf7ee);
   min-width: 0;
+  position: relative;
 }
 
 .aos-hermes-header {
-  padding: 11px 22px;
-  border-bottom: 1px solid var(--aos-border, rgba(171, 118, 42, 0.18));
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--aos-border, rgba(171, 118, 42, 0.16));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -5488,39 +5501,60 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1;
+}
+
+/* bot 图标专属浅金底托槽（对应图四左侧金色微标托底，像素级绝对对齐） */
+.aos-hermes-header-icon-wrap {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(171, 118, 42, 0.1);
+  border: 1px solid rgba(171, 118, 42, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 .aos-hermes-header-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--aos-gold, #a96f17);
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
 }
+.aos-hermes-header-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+}
+
 .aos-hermes-header-title {
   font-size: 13.5px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--aos-ink, #342c25);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.01em;
+  max-width: 320px;
 }
 
-/* 2.1 状态药丸 (Translucent Micro-Pill with Breathing Glow) */
+/* 2.1 状态药丸：告别老土“本机就绪”，换装为灵台通达翡翠呼吸光点 */
 .aos-hermes-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 9px;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;
   background: rgba(46, 155, 101, 0.08);
   border: 1px solid rgba(46, 155, 101, 0.24);
-  color: #23784c;
+  color: #1e7045;
   flex-shrink: 0;
   transition: all 0.2s ease;
 }
@@ -5543,69 +5577,80 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   box-shadow: 0 0 4px rgba(200, 86, 78, 0.5);
 }
 
-/* 2.2 顶部 Ghost 幽灵操作按钮 (No clunky white buttons) */
-.aos-hermes-ghost-actions {
+/* 2.2 顶栏右侧按钮：彻底消灭突兀白块，全面对齐图四「松果阁总坛」象牙米白与淡金边框 */
+.aos-hermes-deck-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
-.aos-hermes-ghost-btn {
+
+.aos-hermes-deck-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 27px;
+  height: 28px;
   padding: 0 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(171, 118, 42, 0.2);
-  color: var(--aos-ink-muted, #766b60);
+  border-radius: 7px;
+  background: rgba(255, 252, 245, 0.88);
+  border: 1px solid rgba(171, 118, 42, 0.22);
+  color: var(--aos-ink, #342c25);
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(91, 64, 30, 0.04);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.aos-hermes-ghost-btn:hover {
+.aos-hermes-deck-btn:hover {
   background: #ffffff;
-  border-color: rgba(171, 118, 42, 0.42);
+  border-color: rgba(171, 118, 42, 0.45);
   color: var(--aos-gold, #a96f17);
-  box-shadow: 0 1px 4px rgba(91, 64, 30, 0.08);
+  box-shadow: 0 2px 6px rgba(169, 111, 23, 0.12);
   transform: translateY(-0.5px);
 }
-.aos-hermes-ghost-btn:active {
+.aos-hermes-deck-btn:active {
   transform: scale(0.97);
 }
-.aos-hermes-ghost-btn.is-danger:hover {
+.aos-hermes-deck-btn.is-danger:hover {
   background: rgba(200, 86, 78, 0.06);
-  border-color: rgba(200, 86, 78, 0.35);
+  border-color: rgba(200, 86, 78, 0.38);
   color: #c8564e;
-  box-shadow: 0 1px 4px rgba(200, 86, 78, 0.1);
+  box-shadow: 0 2px 6px rgba(200, 86, 78, 0.12);
 }
-.aos-hermes-ghost-icon {
+.aos-hermes-deck-btn-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: var(--aos-gold, #a96f17);
   width: 13px;
   height: 13px;
 }
-.aos-hermes-ghost-icon svg {
+.aos-hermes-deck-btn.is-danger .aos-hermes-deck-btn-icon {
+  color: var(--aos-ink-muted, #766b60);
+}
+.aos-hermes-deck-btn.is-danger:hover .aos-hermes-deck-btn-icon {
+  color: #c8564e;
+}
+.aos-hermes-deck-btn-icon svg {
   width: 13px;
   height: 13px;
   stroke-width: 2;
 }
 
 /* --------------------------------------------------------------------------
-   AREA 3: Message Stream & Action Pills
+   AREA 3: 消息流视窗 (彻底找回输入框：限定消息列表高度为 flex: 1 内部滚动)
    -------------------------------------------------------------------------- */
-.aos-hermes-stream-wrap {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
+.aos-hermes-messages {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding: 18px 22px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
 }
 
-.aos-hermes-empty {
+.aos-hermes-empty-state {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -5614,30 +5659,39 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   gap: 10px;
   color: var(--aos-ink-muted, #766b60);
   text-align: center;
-  padding: 40px 20px;
+  padding: 30px 20px;
 }
-.aos-hermes-empty-icon {
+.aos-empty-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--aos-gold, #a96f17);
-  opacity: 0.6;
+  opacity: 0.65;
 }
-.aos-hermes-empty-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--aos-ink, #342c25);
-}
-.aos-hermes-empty-hint {
-  font-size: 12.5px;
-  line-height: 1.6;
-  max-width: 440px;
-}
-
-.aos-hermes-stream {
+.aos-hermes-empty-cards {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 8px;
+  max-width: 520px;
+  width: 100%;
+  margin-top: 10px;
+}
+.aos-hermes-prompt-card {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.85);
+  border: 1px solid rgba(171, 118, 42, 0.2);
+  color: var(--aos-ink, #342c25);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.aos-hermes-prompt-card:hover {
+  background: #ffffff;
+  border-color: var(--aos-gold, #a96f17);
+  box-shadow: 0 2px 8px rgba(169, 111, 23, 0.12);
+  transform: translateY(-1px);
 }
 
 /* 用户气泡 */
@@ -5657,7 +5711,7 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
 /* 智能体助手卡片 */
 .aos-hermes-msg-assistant {
   align-self: flex-start;
-  max-width: 88%;
+  max-width: 90%;
   background: var(--aos-surface, rgba(255, 252, 245, 0.96));
   border: 1px solid rgba(171, 118, 42, 0.22);
   border-radius: 14px 14px 14px 3px;
@@ -5692,9 +5746,10 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   font-weight: 800;
   color: var(--aos-ink, #342c25);
 }
-.aos-hermes-author-icon {
-  display: inline-flex;
+.aos-hermes-author-badge svg {
   color: var(--aos-gold, #a96f17);
+  width: 14px;
+  height: 14px;
 }
 .aos-hermes-msg-time {
   font-size: 10.5px;
@@ -5766,7 +5821,7 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   font-size: 11.5px;
 }
 
-/* 3.1 消息动作按钮胶囊 (Aetheric Gold Pill Actions) */
+/* 消息动作按钮小药丸 */
 .aos-hermes-actions-row {
   display: flex;
   gap: 7px;
@@ -5816,16 +5871,17 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
 }
 
 /* --------------------------------------------------------------------------
-   AREA 4: Bottom Composer & Send Button
+   AREA 4: 底部对话框发射台 (稳稳固定在底部，永不被挤掉)
    -------------------------------------------------------------------------- */
 .aos-hermes-composer {
-  padding: 10px 24px 14px;
+  flex-shrink: 0 !important;
+  padding: 10px 22px 14px;
   border-top: 1px solid var(--aos-border, rgba(171, 118, 42, 0.18));
   background: var(--aos-paper, #f6efe1);
   display: flex;
   flex-direction: column;
   gap: 7px;
-  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .aos-hermes-context-chip {
@@ -5841,19 +5897,7 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   font-weight: 600;
   color: var(--aos-gold, #a96f17);
 }
-.aos-hermes-chip-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-}
-.aos-hermes-chip-icon svg {
-  width: 12px;
-  height: 12px;
-}
 
-/* 4.1 输入框大胶囊容器 */
 .aos-hermes-input-box {
   display: flex;
   gap: 8px;
@@ -5888,7 +5932,6 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   color: rgba(118, 107, 96, 0.65);
 }
 
-/* 4.2 发送按钮 (Idle vs Active States) */
 .aos-hermes-send-btn {
   width: 32px;
   height: 32px;
@@ -5927,19 +5970,12 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   transform: scale(0.92);
 }
 
-/* 快捷灵感芯片 */
 .aos-hermes-quick-chips {
   display: flex;
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
   padding-top: 1px;
-}
-.aos-hermes-quick-label {
-  font-size: 10.5px;
-  color: var(--aos-ink-muted, #766b60);
-  font-weight: 600;
-  margin-right: 2px;
 }
 .aos-hermes-preset-pill {
   font-size: 11px;
@@ -5965,4 +6001,45 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   align-items: center;
   gap: 6px;
   opacity: 0.85;
+}
+
+/* --------------------------------------------------------------------------
+   AREA 5: 图五导航区展开/折叠按钮 (对齐图四「松果阁总坛」温润象牙色质感)
+   -------------------------------------------------------------------------- */
+.aos-navigator-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 10px 14px 6px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  color: var(--aos-ink-muted, #766b60) !important;
+  text-transform: uppercase !important;
+}
+
+.aos-navigator-header .aos-icon-button {
+  width: 24px !important;
+  height: 24px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(171, 118, 42, 0.22) !important;
+  background: rgba(255, 252, 245, 0.88) !important;
+  color: var(--aos-ink, #342c25) !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 3px rgba(91, 64, 30, 0.04) !important;
+  transition: all 0.15s ease !important;
+}
+
+.aos-navigator-header .aos-icon-button:hover {
+  background: #ffffff !important;
+  border-color: rgba(171, 118, 42, 0.45) !important;
+  color: var(--aos-gold, #a96f17) !important;
+  box-shadow: 0 2px 6px rgba(169, 111, 23, 0.12) !important;
+  transform: translateY(-0.5px) !important;
 }

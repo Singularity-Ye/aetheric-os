@@ -214,37 +214,43 @@ export class TasksPage {
     const activeSession = this.sessions.find((s) => s.id === this.activeSessionId);
     const header = main.createDiv({ cls: "aos-hermes-header" });
 
-    const titleArea = header.createDiv({ cls: "aos-hermes-header-title" });
-    const botIcon = titleArea.createSpan({ cls: "aos-hermes-header-icon" });
+    const leftArea = header.createDiv({ cls: "aos-hermes-header-left" });
+    const botWrap = leftArea.createSpan({ cls: "aos-hermes-header-icon-wrap" });
+    const botIcon = botWrap.createSpan({ cls: "aos-hermes-header-icon" });
     setIcon(botIcon, "bot");
-    titleArea.createSpan({ text: activeSession?.title || "Hermes Agent 工造作战室" });
 
-    const badge = titleArea.createSpan({
+    leftArea.createSpan({
+      cls: "aos-hermes-header-title",
+      text: activeSession?.title || "Hermes Agent 工造作战室",
+    });
+
+    const modelName = activeSession?.model || this.health.model || "gpt-5.6-luna";
+    const badge = leftArea.createSpan({
       cls: `aos-hermes-badge ${this.health.online ? "is-online" : "is-offline"}`,
     });
     badge.setText(
       this.health.online
-        ? `🟢 本机就绪 · ${activeSession?.model || this.health.model}`
-        : "🔴 Gateway 离线 (127.0.0.1:8642)"
+        ? `灵台通达 · ${modelName}`
+        : "离线 (127.0.0.1:8642)"
     );
 
-    // Right Ghost Actions (No clumsy white buttons)
-    const actions = header.createDiv({ cls: "aos-hermes-ghost-actions" });
+    // Right Deck Actions (Warm Ivory & Gold border, strictly matching 图四 style)
+    const actions = header.createDiv({ cls: "aos-hermes-deck-actions" });
     const refreshBtn = actions.createEl("button", {
-      cls: "aos-hermes-ghost-btn",
+      cls: "aos-hermes-deck-btn",
       attr: { type: "button", title: "刷新会话交互" },
     });
-    const refIcon = refreshBtn.createSpan({ cls: "aos-hermes-ghost-icon" });
+    const refIcon = refreshBtn.createSpan({ cls: "aos-hermes-deck-btn-icon" });
     setIcon(refIcon, "rotate-cw");
     refreshBtn.createSpan({ text: "刷新" });
     refreshBtn.addEventListener("click", () => void this.reloadCurrentSession());
 
     if (this.activeSessionId) {
       const delBtn = actions.createEl("button", {
-        cls: "aos-hermes-ghost-btn is-danger",
+        cls: "aos-hermes-deck-btn is-danger",
         attr: { type: "button", title: "删除此工造会话" },
       });
-      const delIcon = delBtn.createSpan({ cls: "aos-hermes-ghost-icon" });
+      const delIcon = delBtn.createSpan({ cls: "aos-hermes-deck-btn-icon" });
       setIcon(delIcon, "trash-2");
       delBtn.createSpan({ text: "删除会话" });
       delBtn.addEventListener("click", () => void this.handleDeleteSession());
