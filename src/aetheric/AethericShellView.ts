@@ -7488,8 +7488,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       this.cloudBotService.loadSnapshot(),
     ]).then(([weather, focusItems, foodChoice, todos, cloudSnapshot]) => {
       if (tx !== this.lifeRefreshTx || !dashboard.statusCard.isConnected || !dashboard.todoCard.isConnected) return;
-      this.populateLifeStatus(dashboard.statusCard, weather, focusItems, foodChoice);
       this.cloudBotSnapshot = cloudSnapshot;
+      this.populateLifeStatus(dashboard.statusCard, weather, focusItems, foodChoice);
       this.populateLifeBotHub(dashboard.todoCard, todos);
     }).catch(err => {
       if (tx !== this.lifeRefreshTx || !dashboard.statusCard.isConnected || !dashboard.todoCard.isConnected) return;
@@ -7847,10 +7847,8 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     card.classList.remove("is-loading");
     card.empty();
 
-    const heading = card.createDiv({ cls: "aos-life-todo-heading" });
-    const headingRow = heading.createDiv({ attr: { style: "display: flex; align-items: center; justify-content: space-between; width: 100%;" } });
-
-    const tabs = headingRow.createDiv({ cls: "aos-life-bot-tabs" });
+    const heading = card.createDiv({ cls: "aos-life-bot-nav-header" });
+    const tabs = heading.createDiv({ cls: "aos-life-bot-tabs" });
 
     const buildTab = (iconName: string, label: string, badge?: string) => {
       const btn = tabs.createEl("button", { cls: "aos-life-tab-btn" });
@@ -7866,9 +7864,9 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const steamTabBtn = buildTab("trending-up", "饰品行情");
     const couponCount = this.cloudBotSnapshot?.coupons?.length ?? 15;
     const couponTabBtn = buildTab("ticket", "商家券", `${couponCount}`);
-    const todoTabBtn = buildTab("list-checks", "密室待办");
+    const todoTabBtn = buildTab("sparkles", "研产交点");
 
-    const refreshBtn = headingRow.createEl("button", {
+    const refreshBtn = heading.createEl("button", {
       cls: "aos-life-tab-btn aos-life-refresh-action",
       attr: { title: "从云端微信 Bot 立即拉取最新商家券与 Steam 行情数据" }
     });
@@ -8043,28 +8041,28 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const heading = card.createDiv({ cls: "aos-life-todo-heading" });
     const todoTitle = heading.createDiv({ cls: "aos-panel-title aos-life-icon-title" });
     const todoTitleIcon = todoTitle.createSpan({ cls: "aos-life-title-icon" });
-    setIcon(todoTitleIcon, "list-checks");
-    todoTitle.createSpan({ text: "密室今日小目标" });
+    setIcon(todoTitleIcon, "sparkles");
+    todoTitle.createSpan({ text: "今日研产交点" });
 
     let completedCount = todos.filter(todo => todo.status === "done").length;
     const progressText = heading.createDiv({
       cls: "aos-life-todo-progress-text",
-      text: todos.length > 0 ? `${completedCount} / ${todos.length} 已完成` : "今日尚未开张"
+      text: todos.length > 0 ? `${completedCount} / ${todos.length} 已研产落地` : "等待唤起研产"
     });
     const progressTrack = card.createDiv({ cls: "aos-life-todo-progress-track" });
     const progressBar = progressTrack.createDiv({ cls: "aos-life-todo-progress-bar" });
 
     const updateProgress = (): void => {
       const percent = todos.length > 0 ? Math.round((completedCount / todos.length) * 100) : 0;
-      progressText.textContent = todos.length > 0 ? `${completedCount} / ${todos.length} 已完成` : "今日尚未开张";
+      progressText.textContent = todos.length > 0 ? `${completedCount} / ${todos.length} 已研产落地` : "等待唤起研产";
       progressBar.style.width = `${percent}%`;
-      progressTrack.setAttribute("aria-label", `今日小目标完成度 ${percent}%`);
+      progressTrack.setAttribute("aria-label", `今日研产完成度 ${percent}%`);
     };
     updateProgress();
 
     const listContainer = card.createDiv({ cls: "aos-life-todo-list" });
     if (todos.length === 0) {
-      listContainer.createDiv({ cls: "aos-empty-state", text: "今日暂无目标，在下方极速记录一个吧！" });
+      listContainer.createDiv({ cls: "aos-empty-state", text: "今日暂无研产任务，可从下方「载入待办灵感」或「唤起 Hermes」直接研产！" });
     } else {
       const orderedTodos = [...todos].sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
       for (const todo of orderedTodos) {
@@ -8076,7 +8074,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
         const label = row.createSpan({ text: todo.title, cls: "aos-life-todo-label" });
         if (isCompleted) label.classList.add("is-completed");
-        label.setAttribute("title", "点击编辑小目标");
+        label.setAttribute("title", "点击编辑研产条目");
         label.addEventListener("click", () => this.openLifeTodoEditModal(todo));
 
         const rowActions = row.createDiv({ cls: "aos-life-todo-actions" });
@@ -8090,14 +8088,13 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
           });
           return button;
         };
-        action("编辑", "pencil", "编辑小目标并调整日期或时段", () => this.openLifeTodoEditModal(todo));
+        action("AI研产", "sparkles", "让 Copilot / Hermes 围绕当前目标研究并交付草案；不会自动落库", () => this.runLifeGoalResearch(todo));
         if (todo.source_note?.path) {
-          action("查看来源", "lightbulb", "打开关联的来源灵感笔记；不会切换左侧灵感区", () => this.openFileByPath(todo.source_note!.path));
-        } else {
-          action("AI研产", "sparkles", "让 Copilot 围绕当前小目标研究并交付草案；不会自动落库", () => this.runLifeGoalResearch(todo));
+          action("查看来源", "file-text", "打开关联的来源灵感笔记；不会切换左侧灵感区", () => this.openFileByPath(todo.source_note!.path));
         }
-        action("移除", "trash-2", "从计划账本移除这条小目标", () => {
-          void this.deleteLifeTodo(todo).catch(error => new Notice(`移除小目标失败：${error instanceof Error ? error.message : String(error)}`));
+        action("编辑", "pencil", "编辑条目并调整日期或时段", () => this.openLifeTodoEditModal(todo));
+        action("移除", "trash-2", "从计划账本移除这条研产目标", () => {
+          void this.deleteLifeTodo(todo).catch(error => new Notice(`移除条目失败：${error instanceof Error ? error.message : String(error)}`));
         });
 
         cb.addEventListener("change", async () => {
@@ -8124,35 +8121,57 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
             row.classList.toggle("is-completed", wasCompleted);
             completedCount += wasCompleted ? 1 : -1;
             updateProgress();
-            new Notice(`更新小目标失败：${error instanceof Error ? error.message : String(error)}`);
+            new Notice(`更新研产状态失败：${error instanceof Error ? error.message : String(error)}`);
           }
         });
       }
     }
 
-    const inputRow = card.createDiv({ cls: "aos-life-input-row" });
-    const todoInput = inputRow.createEl("input", {
-      cls: "aos-life-todo-input",
-      attr: { placeholder: "添加今日专注目标..." }
+    const aiBar = card.createDiv({ cls: "aos-life-ai-actions-row" });
+    const hermesBtn = aiBar.createEl("button", {
+      cls: "aos-btn aos-btn-primary aos-btn-compact",
+      attr: { title: "唤起 Hermes 智能体工造作战室，展开深度研产研讨" }
     });
-    todoInput.addEventListener("keydown", async (e) => {
-      if (e.key === "Enter" && todoInput.value.trim()) {
-        const text = todoInput.value.trim();
-        todoInput.value = "";
-        await this.addTodoItem(text);
-      }
+    const hermesIco = hermesBtn.createSpan({ cls: "btn-icon" });
+    setIcon(hermesIco, "sparkles");
+    hermesBtn.createSpan({ text: "唤起 Hermes 研产会话" });
+    hermesBtn.addEventListener("click", () => {
+      this.switchModule("tasks");
     });
 
-    const inspirationInput = inputRow.createEl("input", {
-      cls: "aos-life-inspiration-input",
-      attr: { placeholder: "记录随笔与灵感..." }
+    const loadInspirationBtn = aiBar.createEl("button", {
+      cls: "aos-btn aos-btn-secondary aos-btn-compact",
+      attr: { title: "一键载入微信想法与灵感池未提炼条目" }
     });
-    inspirationInput.addEventListener("keydown", async (e) => {
-      if (e.key === "Enter" && inspirationInput.value.trim()) {
-        const text = inspirationInput.value.trim();
-        inspirationInput.value = "";
-        await this.addInspiration(text);
+    const loadIco = loadInspirationBtn.createSpan({ cls: "btn-icon" });
+    setIcon(loadIco, "lightbulb");
+    loadInspirationBtn.createSpan({ text: "载入待办灵感" });
+    loadInspirationBtn.addEventListener("click", async () => {
+      const files = this.getInspirationFiles();
+      if (files.length === 0) {
+        new Notice("灵感池暂无可载入的条目");
+        return;
       }
+      const existingTitles = new Set(todos.map(t => t.title));
+      const candidates = files.filter(f => !existingTitles.has(f.title));
+      if (candidates.length === 0) {
+        new Notice("灵感池所有条目均已在研产列表中！");
+        return;
+      }
+      const target = candidates[0];
+      await this.addTodoItem(target.title, target.path);
+      new Notice(`已将《${target.title}》载入今日研产交点！`);
+    });
+
+    const houseBookBtn = aiBar.createEl("button", {
+      cls: "aos-btn aos-btn-secondary aos-btn-compact",
+      attr: { title: "查阅屋主手札（01_藏经阁/思辨录/05_屋主手札）" }
+    });
+    const bookIco = houseBookBtn.createSpan({ cls: "btn-icon" });
+    setIcon(bookIco, "book-open");
+    houseBookBtn.createSpan({ text: "查阅屋主手札" });
+    houseBookBtn.addEventListener("click", () => {
+      this.switchModule("navigation");
     });
   }
 

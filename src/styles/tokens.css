@@ -49,12 +49,20 @@
   --aos-btn-h-lg: 38px;
   --aos-input-h: 32px;
 
-  /* Motion & Spring Physics */
-  --aos-ease-tactile: cubic-bezier(0.2, 0, 0, 1);
-  --aos-ease-paper: cubic-bezier(0.16, 1, 0.3, 1);
-  --aos-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
-  --aos-dur-fast: 140ms;
-  --aos-dur-base: 220ms;
+  /* =========================================
+     AOS Motion & Micro-Interaction System
+     ========================================= */
+  /* Timing Curves */
+  --aos-ease-paper: cubic-bezier(0.16, 1, 0.3, 1);      /* Silk-smooth deceleration: panels, popovers, reveals */
+  --aos-ease-tactile: cubic-bezier(0.2, 0, 0, 1);       /* Quick mechanical response: clicks, toggles */
+  --aos-ease-spring: cubic-bezier(0.34, 1.35, 0.64, 1); /* Subtle bouncy overshoot: pins, chips */
+  --aos-ease-fade: cubic-bezier(0.4, 0, 0.2, 1);        /* Standard crossfade: quote transitions, text swaps */
+
+  /* Duration Standards */
+  --aos-dur-micro: 120ms;  /* Button hover color, subtle border shifts */
+  --aos-dur-fast: 160ms;   /* Text cross-fades, badges appearing */
+  --aos-dur-base: 220ms;   /* Cards sliding, tab switching */
+  --aos-dur-smooth: 320ms; /* Drawer expanding, modal entry */
 }
 
 .theme-dark {
