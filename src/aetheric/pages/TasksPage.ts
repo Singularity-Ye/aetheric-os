@@ -10,8 +10,8 @@ export interface TasksPageContext {
 }
 
 /**
- * TasksPage: Re-imagined Antigravity-grade Hermes Agent Mission Control & Workbench.
- * Blends dual-pane agent conversation flow with underlying PlanLedger & daemon tasks.
+ * TasksPage: High-craft, Antigravity-grade dual-pane Hermes Agent Mission Control.
+ * Unified with Aetheric OS ivory/walnut-gold design language, with rock-solid scroll stability.
  */
 export class TasksPage {
   private hermes = new HermesClient();
@@ -21,20 +21,35 @@ export class TasksPage {
   private activeTab: "sessions" | "plan" | "daemon" = "sessions";
   private searchQuery = "";
   private isSending = false;
-  private health: { online: boolean; model?: string; sessionCount: number } = { online: false, model: "gpt-5.6-luna", sessionCount: 0 };
+  private health: { online: boolean; model?: string; sessionCount: number } = {
+    online: false,
+    model: "gpt-5.6-luna",
+    sessionCount: 0,
+  };
+
   private containerEl!: HTMLElement;
   private messageListEl!: HTMLElement;
   private composerInputEl!: HTMLTextAreaElement;
+  private sessionListContainerEl!: HTMLElement;
+
+  /** Track user scrolling so background updates do not yank scroll position */
+  private userScrolledUp = false;
 
   constructor(private context: TasksPageContext) {}
 
   async mount(parent: HTMLElement): Promise<void> {
+    // If container already mounted, just re-render cleanly
+    if (this.containerEl && this.containerEl.parentElement === parent) {
+      this.render();
+      return;
+    }
+
     this.containerEl = parent.createDiv({ cls: "aos-page aos-hermes-workbench" });
 
-    // Initial health probe
+    // Initial health probe & load
     this.health = await this.hermes.checkHealth();
     if (this.health.online) {
-      this.sessions = await this.hermes.listSessions(50);
+      this.sessions = await this.hermes.listSessions(60);
       if (this.sessions.length > 0 && !this.activeSessionId) {
         this.activeSessionId = this.sessions[0].id;
       }
@@ -43,50 +58,76 @@ export class TasksPage {
     this.render();
   }
 
+  /**
+   * Called when background Hamasxiang daemon ticks; updates daemon sub-deck if open,
+   * without nuking the active chat or disturbing scroll position.
+   */
+  onDaemonUpdate(): void {
+    if (this.activeTab === "daemon") {
+      this.renderMain();
+    }
+  }
+
   private render(): void {
     this.containerEl.empty();
     this.renderSidebar();
     this.renderMain();
   }
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // Left Sidebar: Session & Task Rail
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   private renderSidebar(): void {
     const sidebar = this.containerEl.createDiv({ cls: "aos-hermes-sidebar" });
     const header = sidebar.createDiv({ cls: "aos-hermes-sidebar-header" });
 
+    // Header badge
+    const brandLine = header.createDiv({ cls: "aos-hermes-brand-line" });
+    const logoSpan = brandLine.createSpan({ cls: "aos-hermes-brand-icon" });
+    setIcon(logoSpan, "bot");
+    brandLine.createSpan({ cls: "aos-hermes-brand-title", text: "智能体工造作战室" });
+
     // + New Conversation Button
-    const newBtn = header.createEl("button", { cls: "aos-hermes-new-btn" });
+    const newBtn = header.createEl("button", {
+      cls: "aos-hermes-new-btn",
+      attr: { type: "button", title: "开启新的 Hermes 对话与工造任务" },
+    });
     const plusIcon = newBtn.createSpan();
     setIcon(plusIcon, "plus");
     newBtn.createSpan({ text: "新建工造会话" });
     newBtn.addEventListener("click", () => void this.handleCreateSession());
 
-    // Search bar
-    const searchInput = header.createEl("input", {
+    // Search input bar
+    const searchWrapper = header.createDiv({ cls: "aos-hermes-search-wrap" });
+    const searchIcon = searchWrapper.createSpan({ cls: "aos-hermes-search-icon" });
+    setIcon(searchIcon, "search");
+    const searchInput = searchWrapper.createEl("input", {
       cls: "aos-hermes-search",
-      attr: { type: "text", placeholder: "搜索会话或任务..." },
+      attr: { type: "text", placeholder: "搜索会话或工造任务..." },
     });
     searchInput.value = this.searchQuery;
     searchInput.addEventListener("input", () => {
       this.searchQuery = searchInput.value.toLowerCase().trim();
-      this.renderSessionList(sessionListContainer);
+      if (this.sessionListContainerEl) {
+        this.renderSessionList(this.sessionListContainerEl);
+      }
     });
 
-    // Tab buttons: Agent Sessions / PlanLedger / Daemon
+    // Sub-mode tabs: Sessions / PlanLedger / Daemon
     const tabs = header.createDiv({ cls: "aos-hermes-tabs" });
-    const tabConfigs: Array<{ id: "sessions" | "plan" | "daemon"; label: string }> = [
-      { id: "sessions", label: "💬 会话" },
-      { id: "plan", label: "📋 账本" },
-      { id: "daemon", label: "⚙️ 守护" },
+    const tabConfigs: Array<{ id: "sessions" | "plan" | "daemon"; label: string; icon: string }> = [
+      { id: "sessions", label: "会话", icon: "message-square" },
+      { id: "plan", label: "账本", icon: "calendar-check" },
+      { id: "daemon", label: "守护", icon: "radio" },
     ];
 
     for (const t of tabConfigs) {
       const btn = tabs.createEl("button", {
         cls: `aos-hermes-tab-btn ${this.activeTab === t.id ? "is-active" : ""}`,
-        text: t.label,
       });
+      const iconSpan = btn.createSpan({ cls: "aos-hermes-tab-icon" });
+      setIcon(iconSpan, t.icon);
+      btn.createSpan({ text: t.label });
       btn.addEventListener("click", () => {
         this.activeTab = t.id;
         this.render();
@@ -94,11 +135,11 @@ export class TasksPage {
     }
 
     // Scrollable List container
-    const sessionListContainer = sidebar.createDiv({ cls: "aos-hermes-session-list" });
+    this.sessionListContainerEl = sidebar.createDiv({ cls: "aos-hermes-session-list" });
     if (this.activeTab === "sessions") {
-      this.renderSessionList(sessionListContainer);
+      this.renderSessionList(this.sessionListContainerEl);
     } else {
-      this.renderAlternateSidebarMeta(sessionListContainer);
+      this.renderAlternateSidebarMeta(this.sessionListContainerEl);
     }
   }
 
@@ -109,8 +150,10 @@ export class TasksPage {
     );
 
     if (filtered.length === 0) {
-      const empty = container.createDiv({ cls: "aos-empty-hint" });
-      empty.createSpan({ text: this.health.online ? "暂无匹配的会话" : "🔴 Hermes Gateway 离线 (8642)" });
+      const empty = container.createDiv({ cls: "aos-empty-hint", attr: { style: "padding: 30px 14px;" } });
+      empty.createSpan({
+        text: this.health.online ? "未发现匹配的工造会话" : "🔴 Hermes Gateway 离线 (8642)",
+      });
       return;
     }
 
@@ -120,17 +163,19 @@ export class TasksPage {
 
       const titleRow = item.createDiv({ cls: "aos-hermes-session-title" });
       const dot = titleRow.createSpan({ cls: "aos-hermes-status-dot is-online" });
-      titleRow.createSpan({ text: s.title || s.id });
+      titleRow.createSpan({ cls: "aos-hermes-session-title-text", text: s.title || s.id });
 
       const metaRow = item.createDiv({ cls: "aos-hermes-session-meta" });
-      metaRow.createSpan({ text: this.formatRelativeTime(s.last_active || s.started_at) });
+      metaRow.createSpan({ cls: "aos-hermes-session-time", text: this.formatRelativeTime(s.last_active || s.started_at) });
       if (s.message_count) {
-        metaRow.createSpan({ text: `${s.message_count} 条交互` });
+        const countBadge = metaRow.createSpan({ cls: "aos-hermes-count-badge" });
+        countBadge.setText(`${s.message_count} 交互`);
       }
 
       item.addEventListener("click", () => {
         if (this.activeSessionId === s.id) return;
         this.activeSessionId = s.id;
+        this.userScrolledUp = false;
         this.render();
       });
     }
@@ -138,17 +183,25 @@ export class TasksPage {
 
   private renderAlternateSidebarMeta(container: HTMLElement): void {
     container.empty();
-    const note = container.createDiv({ cls: "aos-panel-note" });
+    const box = container.createDiv({ cls: "aos-hermes-meta-card" });
     if (this.activeTab === "plan") {
-      note.setText("当前视图展示 PlanLedger 计划账本大盘与待办派发；右侧主视窗展示具体执行状态机。");
+      box.createEl("h4", { text: "📋 计划账本 (PlanLedger)" });
+      box.createEl("p", {
+        cls: "aos-panel-note",
+        text: "统筹仙尊规划与 Agent 自动化任务的完整执行流。支持查看排队、执行中、待审阅和已完成的工造交付产物。",
+      });
     } else {
-      note.setText("当前视图展示底层 Hamasxiang Daemon 的运行状态与抓取日志。");
+      box.createEl("h4", { text: "⚙️ 后台守护 (Daemon)" });
+      box.createEl("p", {
+        cls: "aos-panel-note",
+        text: "底层 Hamasxiang 抓取爬虫与 X Watch 守护进程。专司多平台凭据与持久化数据管线，保持静默自愈。",
+      });
     }
   }
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // Right Main Deck: Chat & Mission Control
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   private renderMain(): void {
     const main = this.containerEl.createDiv({ cls: "aos-hermes-main" });
 
@@ -166,7 +219,7 @@ export class TasksPage {
     const header = main.createDiv({ cls: "aos-hermes-header" });
 
     const titleArea = header.createDiv({ cls: "aos-hermes-header-title" });
-    const botIcon = titleArea.createSpan();
+    const botIcon = titleArea.createSpan({ cls: "aos-hermes-header-icon" });
     setIcon(botIcon, "bot");
     titleArea.createSpan({ text: activeSession?.title || "Hermes Agent 工造作战室" });
 
@@ -189,8 +242,14 @@ export class TasksPage {
       delBtn.addEventListener("click", () => void this.handleDeleteSession());
     }
 
-    // Message Stream
+    // Message Stream container with scroll listener
     this.messageListEl = main.createDiv({ cls: "aos-hermes-messages" });
+    this.messageListEl.addEventListener("scroll", () => {
+      const distanceFromBottom =
+        this.messageListEl.scrollHeight - this.messageListEl.scrollTop - this.messageListEl.clientHeight;
+      this.userScrolledUp = distanceFromBottom > 100;
+    });
+
     void this.loadAndRenderMessages();
 
     // Bottom Composer
@@ -203,7 +262,11 @@ export class TasksPage {
       return;
     }
     this.messageListEl.empty();
-    const loading = this.messageListEl.createDiv({ cls: "aos-empty-hint", text: "正在加载会话交互..." });
+    const loading = this.messageListEl.createDiv({
+      cls: "aos-empty-hint",
+      text: "正在加载会话交互...",
+      attr: { style: "margin: auto;" },
+    });
 
     this.messages = await this.hermes.getSessionMessages(this.activeSessionId);
     loading.remove();
@@ -216,7 +279,11 @@ export class TasksPage {
     for (const msg of this.messages) {
       this.renderMessageBubble(this.messageListEl, msg);
     }
-    this.messageListEl.scrollTop = this.messageListEl.scrollHeight;
+
+    // Stable auto-scroll: only snap to bottom if user has not scrolled up
+    if (!this.userScrolledUp) {
+      this.messageListEl.scrollTop = this.messageListEl.scrollHeight;
+    }
   }
 
   private renderEmptyState(container: HTMLElement): void {
@@ -231,7 +298,7 @@ export class TasksPage {
 
     const cards = empty.createDiv({ cls: "aos-hermes-empty-cards" });
     const promptPresets = [
-      "💡 提炼今日收件箱中的灵感，按《屋主手札》规范生成架构思考",
+      "💡 提炼今日收件箱中的灵感，按《05_屋主手札》规范生成架构思考",
       "📊 深度分析 Parallax 交易状态机算法与单测覆盖",
       "🔍 梳理《博德之门3》构筑策略并归入生活簿/游艺录",
       "📅 规划今日松果天工台的开发任务与执行计划",
@@ -256,17 +323,25 @@ export class TasksPage {
 
     // Assistant Header with thinking & tools
     if (!isUser) {
-      const headerRow = bubble.createDiv({
-        cls: "aos-hermes-session-meta",
-        attr: { style: "margin-bottom: 6px; font-weight: 700;" },
+      const headerRow = bubble.createDiv({ cls: "aos-hermes-msg-header" });
+      const leftTag = headerRow.createSpan({ cls: "aos-hermes-author-badge" });
+      const botIco = leftTag.createSpan();
+      setIcon(botIco, "bot");
+      leftTag.createSpan({ text: "Hermes Agent" });
+
+      headerRow.createSpan({
+        cls: "aos-hermes-msg-time",
+        text: this.formatTimestamp(msg.timestamp),
       });
-      headerRow.createSpan({ text: `🤖 Hermes Agent · ${this.formatTimestamp(msg.timestamp)}` });
 
       // Thinking details callout if available
       const reasoning = msg.reasoning || msg.reasoning_content;
       if (reasoning) {
         const details = bubble.createEl("details", { cls: "aos-hermes-thinking" });
-        details.createEl("summary", { text: "💭 深度思考过程 (Thinking)" });
+        const summary = details.createEl("summary");
+        const thinkIco = summary.createSpan();
+        setIcon(thinkIco, "sparkles");
+        summary.createSpan({ text: " 深度思考过程 (Thinking)" });
         details.createDiv({ cls: "aos-hermes-thinking-content", text: reasoning });
       }
 
@@ -274,9 +349,14 @@ export class TasksPage {
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         for (const tc of msg.tool_calls) {
           const tcBox = bubble.createDiv({ cls: "aos-hermes-tool-call" });
-          tcBox.setText(`⚙️ 工具调用: ${tc.function?.name || "未知工具"}`);
+          const gear = tcBox.createSpan();
+          setIcon(gear, "settings");
+          tcBox.createSpan({ text: ` 工具调用: ${tc.function?.name || "未知工具"}` });
         }
       }
+    } else {
+      const headerRow = bubble.createDiv({ cls: "aos-hermes-msg-header is-user" });
+      headerRow.createSpan({ text: `👑 仙尊 · ${this.formatTimestamp(msg.timestamp)}` });
     }
 
     // Message Content with Markdown & Wikilinks parsing
@@ -286,22 +366,23 @@ export class TasksPage {
     // Assistant Action Pills
     if (!isUser && msg.content) {
       const actions = bubble.createDiv({ cls: "aos-hermes-actions-row" });
-      const pinBtn = actions.createEl("button", {
-        cls: "aos-hermes-action-pill",
-        text: "📝 写入松果池",
-      });
+
+      const pinBtn = actions.createEl("button", { cls: "aos-hermes-action-pill" });
+      const pinIcon = pinBtn.createSpan();
+      setIcon(pinIcon, "file-edit");
+      pinBtn.createSpan({ text: " 写入松果池" });
       pinBtn.addEventListener("click", () => void this.writeToInbox(msg.content));
 
-      const scheduleBtn = actions.createEl("button", {
-        cls: "aos-hermes-action-pill",
-        text: "📅 挂入今日日程",
-      });
+      const scheduleBtn = actions.createEl("button", { cls: "aos-hermes-action-pill" });
+      const calIcon = scheduleBtn.createSpan();
+      setIcon(calIcon, "calendar-plus");
+      scheduleBtn.createSpan({ text: " 挂入今日日程" });
       scheduleBtn.addEventListener("click", () => void this.createScheduleFromText(msg.content));
 
-      const copyBtn = actions.createEl("button", {
-        cls: "aos-hermes-action-pill",
-        text: "📋 复制正文",
-      });
+      const copyBtn = actions.createEl("button", { cls: "aos-hermes-action-pill" });
+      const cpIcon = copyBtn.createSpan();
+      setIcon(cpIcon, "copy");
+      copyBtn.createSpan({ text: " 复制正文" });
       copyBtn.addEventListener("click", () => {
         void navigator.clipboard.writeText(msg.content);
         new Notice("已复制到剪贴板");
@@ -309,9 +390,9 @@ export class TasksPage {
     }
   }
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // Bottom Composer Deck
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   private renderComposer(parent: HTMLElement): void {
     const composer = parent.createDiv({ cls: "aos-hermes-composer" });
 
@@ -333,7 +414,7 @@ export class TasksPage {
 
     const sendBtn = inputBox.createEl("button", {
       cls: "aos-hermes-send-btn",
-      attr: { type: "button", "aria-label": "发送" },
+      attr: { type: "button", "aria-label": "发送指令" },
     });
     setIcon(sendBtn, "arrow-up");
 
@@ -350,11 +431,26 @@ export class TasksPage {
         doSend();
       }
     });
+
+    // Quick prompt chips
+    const quickBar = composer.createDiv({ cls: "aos-hermes-quick-chips" });
+    const presets = [
+      { label: "✦ 提炼为手札", prompt: "请读取当前笔记，按照《05_屋主手札》规范提炼核心认知突破与行动要点：" },
+      { label: "✦ 架构解耦分析", prompt: "请结合当前工程，给出高内聚低耦合的架构重构方案与单测设计：" },
+      { label: "✦ 生成执行计划", prompt: "请将当前需求拆解为 PlanLedger 结构化任务与分步里程碑：" },
+    ];
+    for (const p of presets) {
+      const chip = quickBar.createSpan({ cls: "aos-hermes-preset-pill", text: p.label });
+      chip.addEventListener("click", () => {
+        this.composerInputEl.value = `${p.prompt} \n`;
+        this.composerInputEl.focus();
+      });
+    }
   }
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // PlanLedger & Daemon Alternate Decks
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   private renderPlanLedgerDeck(parent: HTMLElement): void {
     const deck = parent.createDiv({ cls: "aos-page" });
     const heading = deck.createDiv({ cls: "aos-page-heading" });
@@ -382,14 +478,15 @@ export class TasksPage {
     this.context.renderTaskList(active, tasks, false);
   }
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // Handlers & Business Logic
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   private async handleCreateSession(): Promise<void> {
     const session = await this.hermes.createSession();
     if (session) {
       this.sessions.unshift(session);
       this.activeSessionId = session.id;
+      this.userScrolledUp = false;
       this.render();
       new Notice(`已创建新工造会话：${session.title}`);
     } else {
@@ -404,6 +501,7 @@ export class TasksPage {
     if (ok) {
       this.sessions = this.sessions.filter((s) => s.id !== toDelete);
       this.activeSessionId = this.sessions[0]?.id || null;
+      this.userScrolledUp = false;
       this.render();
       new Notice("已删除该工造会话");
     } else {
@@ -413,7 +511,7 @@ export class TasksPage {
 
   private async reloadCurrentSession(): Promise<void> {
     this.health = await this.hermes.checkHealth();
-    this.sessions = await this.hermes.listSessions(50);
+    this.sessions = await this.hermes.listSessions(60);
     this.render();
     new Notice("已刷新会话状态");
   }
@@ -428,6 +526,7 @@ export class TasksPage {
 
     this.composerInputEl.value = "";
     this.isSending = true;
+    this.userScrolledUp = false;
 
     // Immediately push optimistic user message
     this.messages.push({
@@ -440,16 +539,16 @@ export class TasksPage {
 
     // Show typing indicator
     const typingIndicator = this.messageListEl.createDiv({
-      cls: "aos-hermes-msg-assistant",
-      attr: { style: "opacity: 0.7;" },
+      cls: "aos-hermes-msg-assistant aos-hermes-typing",
     });
-    typingIndicator.setText("🤖 Hermes 正在深入思考与执行工造...");
+    const typingSpan = typingIndicator.createSpan();
+    setIcon(typingSpan, "loader");
+    typingIndicator.createSpan({ text: " Hermes 正在深入思考与执行工造..." });
 
     try {
       const response = await this.hermes.sendMessage(this.activeSessionId, text);
       typingIndicator.remove();
       if (response && response.message) {
-        // Fetch full transcript with reasoning & tool calls
         await this.loadAndRenderMessages();
       } else {
         new Notice("Hermes 未返回有效响应");
@@ -491,14 +590,14 @@ export class TasksPage {
     }
   }
 
-  // --------------------------------------------------------------------------
-  // Helpers
-  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // Helpers & Formatting
+  // ==========================================================================
   private renderMarkdownWithWikilinks(container: HTMLElement, raw: string): void {
     if (!raw) return;
     const paragraphs = raw.split("\n\n");
     for (const para of paragraphs) {
-      const p = container.createEl("p", { attr: { style: "margin: 0 0 8px;" } });
+      const p = container.createEl("p", { attr: { style: "margin: 0 0 10px; line-height: 1.65;" } });
       const parts = para.split(/(\[\[[^\]]+\]\])/g);
       for (const part of parts) {
         if (part.startsWith("[[") && part.endsWith("]]")) {
@@ -506,7 +605,10 @@ export class TasksPage {
           const link = p.createEl("a", {
             cls: "internal-link",
             text: `[[${linkTarget}]]`,
-            attr: { style: "color: var(--aos-gold, #a96f17); font-weight: 700; cursor: pointer;" },
+            attr: {
+              style:
+                "color: var(--aos-gold, #a96f17); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;",
+            },
           });
           link.addEventListener("click", (e) => {
             e.preventDefault();

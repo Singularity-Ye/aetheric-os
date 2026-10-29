@@ -355,6 +355,7 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
   private atlasPage: AtlasPage | null = null;
   private collectionPage: CollectionPage | null = null;
   private schedulePage: SchedulePage | null = null;
+  private tasksPage: TasksPage | null = null;
   private navigatorView: NavigatorView | null = null;
   private graphEdgeLabelMode: ForceGraphEdgeLabelMode = "explore";
   private relationNodeBudget = DEFAULT_RELATION_NODE_BUDGET;
@@ -484,7 +485,11 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     });
     this.unsubscribeHamasxiang = this.plugin.hamasxiangAdapter.subscribe(() => {
       const module = this.plugin.store.getSnapshot().activeModule;
-      if (!["overview", "collection", "tasks", "intelligence", "inspiration", "logs"].includes(module)) return;
+      if (module === "tasks") {
+        this.tasksPage?.onDaemonUpdate?.();
+        return;
+      }
+      if (!["overview", "collection", "intelligence", "inspiration", "logs"].includes(module)) return;
       if (!this.isShellActive()) {
         this.deferSurfaceRefresh({ main: true });
         return;
@@ -4041,13 +4046,15 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
   }
 
   private renderTasks(): void {
-    const tasksPage = new TasksPage({
-      plugin: this.plugin,
-      metric: (parent, label, value, detail) => this.metric(parent, label, value, detail),
-      renderTaskList: (parent, tasks, mini) => this.renderTaskList(parent, tasks, mini),
-      renderArtifactList: (parent, artifacts) => this.renderArtifactList(parent, artifacts),
-    });
-    tasksPage.mount(this.mainPane);
+    if (!this.tasksPage) {
+      this.tasksPage = new TasksPage({
+        plugin: this.plugin,
+        metric: (parent, label, value, detail) => this.metric(parent, label, value, detail),
+        renderTaskList: (parent, tasks, mini) => this.renderTaskList(parent, tasks, mini),
+        renderArtifactList: (parent, artifacts) => this.renderArtifactList(parent, artifacts),
+      });
+    }
+    this.tasksPage.mount(this.mainPane);
   }
 
   private renderIntelligence(): void {
