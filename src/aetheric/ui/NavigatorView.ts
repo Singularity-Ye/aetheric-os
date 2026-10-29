@@ -40,12 +40,16 @@ export class NavigatorView {
 
     const header = this.containerEl!.createDiv({ cls: "aos-navigator-header" });
     header.createSpan({ text: "Workspace" });
-    const collapse = header.createEl("button", { cls: "aos-icon-button", text: state.navigatorMode === "collapsed" ? "»" : "«" });
-    collapse.addEventListener("click", () => {
-      const next = state.navigatorMode === "collapsed" ? "full" : "collapsed";
-      this.context.plugin.store.patch({ navigatorMode: next });
-      this.context.applyPanelWidths();
-      this.renderNavigator();
+    AosUI.deckButton(header, {
+      label: state.navigatorMode === "collapsed" ? "»" : "«",
+      className: "aos-icon-button",
+      title: state.navigatorMode === "collapsed" ? "展开导航栏" : "折叠导航栏",
+      onClick: () => {
+        const next = state.navigatorMode === "collapsed" ? "full" : "collapsed";
+        this.context.plugin.store.patch({ navigatorMode: next });
+        this.context.applyPanelWidths();
+        this.renderNavigator();
+      },
     });
 
     if (!workspace) return;

@@ -50,6 +50,58 @@ export interface AosSearchInputOptions {
   actionTitle?: string;
 }
 
+export interface AosDeckButtonOptions {
+  label: string;
+  icon?: string;
+  isDanger?: boolean;
+  isDisabled?: boolean;
+  title?: string;
+  className?: string;
+  onClick?: (event: MouseEvent) => void;
+}
+
+export interface AosSegmentedTabItem {
+  id: string;
+  label: string;
+  icon?: string;
+}
+
+export interface AosSegmentedControlOptions {
+  tabs: AosSegmentedTabItem[];
+  activeId: string;
+  onChange: (id: string) => void;
+  className?: string;
+}
+
+export interface AosSearchCapsuleOptions {
+  placeholder?: string;
+  value?: string;
+  onInput: (val: string) => void;
+  className?: string;
+}
+
+export interface AosStatusBadgeOptions {
+  online: boolean;
+  onlineText?: string;
+  offlineText?: string;
+  className?: string;
+}
+
+export interface AosActionPillOptions {
+  label: string;
+  icon?: string;
+  title?: string;
+  onClick?: (event: MouseEvent) => void;
+  className?: string;
+}
+
+export interface AosChatComposerOptions {
+  placeholder?: string;
+  activeNoteTitle?: string;
+  presets?: Array<{ label: string; prompt: string }>;
+  onSend: (text: string) => void;
+}
+
 /**
  * AosUI: Centralized UI Primitives Factory for Aetheric OS.
  * Decouples all DOM element construction and design system classes
@@ -390,5 +442,236 @@ export class AosUI {
     else if (status === "queued") dot.addClass("is-queued");
     else if (status === "warning") dot.addClass("is-warning");
     return dot;
+  }
+
+  /**
+   * Creates a warm ivory micro-card deck button (strictly matching 图四「松果阁总坛」style).
+   */
+  static deckButton(parent: HTMLElement, options: AosDeckButtonOptions): HTMLButtonElement {
+    const dangerClass = options.isDanger ? "is-danger" : "";
+    const extraClass = options.className || "";
+    const btn = parent.createEl("button", {
+      cls: `aos-hermes-deck-btn ${dangerClass} ${extraClass}`.trim(),
+      attr: { type: "button" },
+    });
+
+    if (options.title) {
+      btn.setAttribute("title", options.title);
+      btn.setAttribute("aria-label", options.title);
+    }
+    if (options.isDisabled) {
+      btn.disabled = true;
+    }
+
+    if (options.icon) {
+      const iconSpan = btn.createSpan({ cls: "aos-hermes-deck-btn-icon" });
+      setIcon(iconSpan, options.icon);
+    }
+
+    btn.createSpan({ cls: "aos-hermes-deck-btn-text", text: options.label });
+
+    if (options.onClick) {
+      btn.addEventListener("click", (e) => {
+        if (!btn.disabled) options.onClick!(e);
+      });
+    }
+
+    return btn;
+  }
+
+  /**
+   * Creates a Segmented Control (Pill-shaped slider tabs) container.
+   */
+  static segmentedControl(parent: HTMLElement, options: AosSegmentedControlOptions): {
+    containerEl: HTMLElement;
+    buttons: Map<string, HTMLButtonElement>;
+  } {
+    const container = parent.createDiv({
+      cls: `aos-hermes-tabs ${options.className || ""}`.trim(),
+    });
+    const buttons = new Map<string, HTMLButtonElement>();
+
+    for (const tab of options.tabs) {
+      const isActive = tab.id === options.activeId;
+      const btn = container.createEl("button", {
+        cls: `aos-hermes-tab-btn ${isActive ? "is-active" : ""}`,
+        attr: { type: "button" },
+      });
+
+      if (tab.icon) {
+        const iconSpan = btn.createSpan({ cls: "aos-hermes-tab-icon" });
+        setIcon(iconSpan, tab.icon);
+      }
+      btn.createSpan({ text: tab.label });
+
+      btn.addEventListener("click", () => {
+        options.onChange(tab.id);
+      });
+
+      buttons.set(tab.id, btn);
+    }
+
+    return { containerEl: container, buttons };
+  }
+
+  /**
+   * Creates a 100% overlap-free Flexbox search capsule.
+   */
+  static searchCapsule(parent: HTMLElement, options: AosSearchCapsuleOptions): {
+    containerEl: HTMLElement;
+    inputEl: HTMLInputElement;
+  } {
+    const wrap = parent.createDiv({
+      cls: `aos-hermes-search-wrap ${options.className || ""}`.trim(),
+    });
+    const iconSpan = wrap.createSpan({ cls: "aos-hermes-search-icon" });
+    setIcon(iconSpan, "search");
+
+    const input = wrap.createEl("input", {
+      cls: "aos-hermes-search",
+      attr: {
+        type: "text",
+        placeholder: options.placeholder || "搜索…",
+      },
+    });
+
+    if (options.value) {
+      input.value = options.value;
+    }
+
+    input.addEventListener("input", () => {
+      options.onInput(input.value);
+    });
+
+    return { containerEl: wrap, inputEl: input };
+  }
+
+  /**
+   * Creates an Aetheric status badge (5px breathing pulse dot).
+   */
+  static statusBadge(parent: HTMLElement, options: AosStatusBadgeOptions): HTMLSpanElement {
+    const isOnline = options.online;
+    const badge = parent.createSpan({
+      cls: `aos-hermes-badge ${isOnline ? "is-online" : "is-offline"} ${options.className || ""}`.trim(),
+    });
+
+    const text = isOnline
+      ? (options.onlineText || "灵台通达")
+      : (options.offlineText || "离线");
+    badge.setText(text);
+
+    return badge;
+  }
+
+  /**
+   * Creates an Aetheric action pill (24px minimal gold pill button).
+   */
+  static actionPill(parent: HTMLElement, options: AosActionPillOptions): HTMLButtonElement {
+    const pill = parent.createEl("button", {
+      cls: `aos-hermes-action-pill ${options.className || ""}`.trim(),
+      attr: { type: "button" },
+    });
+
+    if (options.title) {
+      pill.setAttribute("title", options.title);
+    }
+
+    if (options.icon) {
+      const iconSpan = pill.createSpan({ cls: "aos-hermes-pill-icon" });
+      setIcon(iconSpan, options.icon);
+    }
+
+    pill.createSpan({ text: options.label });
+
+    if (options.onClick) {
+      pill.addEventListener("click", (e) => options.onClick!(e));
+    }
+
+    return pill;
+  }
+
+  /**
+   * Creates a modern AI chat composer with context chip, amber shuttle button, and quick chips.
+   */
+  static chatComposer(parent: HTMLElement, options: AosChatComposerOptions): {
+    composerEl: HTMLElement;
+    inputEl: HTMLTextAreaElement;
+    sendBtnEl: HTMLButtonElement;
+    setSending: (sending: boolean) => void;
+  } {
+    const composer = parent.createDiv({ cls: "aos-hermes-composer" });
+
+    // Active Note context chip
+    if (options.activeNoteTitle) {
+      const chip = composer.createDiv({ cls: "aos-hermes-context-chip" });
+      const pin = chip.createSpan({ cls: "aos-hermes-chip-icon" });
+      setIcon(pin, "paperclip");
+      chip.createSpan({ text: `已挂载当前笔记: ${options.activeNoteTitle}` });
+    }
+
+    // Input box capsule
+    const inputBox = composer.createDiv({ cls: "aos-hermes-input-box" });
+    const textarea = inputBox.createEl("textarea", {
+      cls: "aos-hermes-textarea",
+      attr: {
+        placeholder: options.placeholder || "输入指令... (Enter 发送, Shift+Enter 换行)",
+        rows: "2",
+      },
+    });
+
+    const sendBtn = inputBox.createEl("button", {
+      cls: "aos-hermes-send-btn",
+      attr: { type: "button", "aria-label": "发送指令", disabled: "true" },
+    });
+    setIcon(sendBtn, "arrow-up");
+
+    let isSending = false;
+
+    const updateSendBtnState = () => {
+      const hasText = Boolean(textarea.value.trim());
+      if (hasText && !isSending) {
+        sendBtn.removeAttribute("disabled");
+        sendBtn.classList.add("is-active");
+      } else {
+        sendBtn.setAttribute("disabled", "true");
+        sendBtn.classList.remove("is-active");
+      }
+    };
+
+    textarea.addEventListener("input", updateSendBtnState);
+
+    const doSend = () => {
+      const text = textarea.value.trim();
+      if (!text || isSending) return;
+      options.onSend(text);
+    };
+
+    sendBtn.addEventListener("click", doSend);
+    textarea.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        doSend();
+      }
+    });
+
+    // Quick prompt chips
+    if (options.presets && options.presets.length > 0) {
+      const quickBar = composer.createDiv({ cls: "aos-hermes-quick-chips" });
+      for (const p of options.presets) {
+        const chip = quickBar.createSpan({ cls: "aos-hermes-preset-pill", text: p.label });
+        chip.addEventListener("click", () => {
+          textarea.value = `${p.prompt} \n`;
+          textarea.focus();
+          updateSendBtnState();
+        });
+      }
+    }
+
+    const setSending = (sending: boolean) => {
+      isSending = sending;
+      updateSendBtnState();
+    };
+
+    return { composerEl: composer, inputEl: textarea, sendBtnEl: sendBtn, setSending };
   }
 }
