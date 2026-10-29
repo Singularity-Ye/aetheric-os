@@ -30,6 +30,7 @@ export class TasksPage {
   private containerEl!: HTMLElement;
   private messageListEl!: HTMLElement;
   private composerInputEl!: HTMLTextAreaElement;
+  private sendBtnEl!: HTMLButtonElement;
   private sessionListContainerEl!: HTMLElement;
 
   /** Track user scrolling so background updates do not yank scroll position */
@@ -38,7 +39,6 @@ export class TasksPage {
   constructor(private context: TasksPageContext) {}
 
   async mount(parent: HTMLElement): Promise<void> {
-    // If container already mounted, just re-render cleanly
     if (this.containerEl && this.containerEl.parentElement === parent) {
       this.render();
       return;
@@ -58,10 +58,6 @@ export class TasksPage {
     this.render();
   }
 
-  /**
-   * Called when background Hamasxiang daemon ticks; updates daemon sub-deck if open,
-   * without nuking the active chat or disturbing scroll position.
-   */
   onDaemonUpdate(): void {
     if (this.activeTab === "daemon") {
       this.renderMain();
@@ -87,14 +83,14 @@ export class TasksPage {
     setIcon(logoSpan, "bot");
     brandLine.createSpan({ cls: "aos-hermes-brand-title", text: "智能体工造作战室" });
 
-    // + New Conversation Button
+    // + New Conversation Button (Gold Relief Style)
     const newBtn = header.createEl("button", {
       cls: "aos-hermes-new-btn",
       attr: { type: "button", title: "开启新的 Hermes 对话与工造任务" },
     });
-    const plusIcon = newBtn.createSpan();
+    const plusIcon = newBtn.createSpan({ cls: "aos-hermes-new-btn-icon" });
     setIcon(plusIcon, "plus");
-    newBtn.createSpan({ text: "新建工造会话" });
+    newBtn.createSpan({ cls: "aos-hermes-new-btn-text", text: "新建工造会话" });
     newBtn.addEventListener("click", () => void this.handleCreateSession());
 
     // Search input bar
@@ -113,7 +109,7 @@ export class TasksPage {
       }
     });
 
-    // Sub-mode tabs: Sessions / PlanLedger / Daemon
+    // Sub-mode tabs: Segmented Control
     const tabs = header.createDiv({ cls: "aos-hermes-tabs" });
     const tabConfigs: Array<{ id: "sessions" | "plan" | "daemon"; label: string; icon: string }> = [
       { id: "sessions", label: "会话", icon: "message-square" },
@@ -232,13 +228,25 @@ export class TasksPage {
         : "🔴 Gateway 离线 (127.0.0.1:8642)"
     );
 
-    // Actions
-    const actions = header.createDiv({ cls: "aos-action-row" });
-    const refreshBtn = actions.createEl("button", { cls: "aos-btn aos-btn-sm", text: "🔄 刷新" });
+    // Right Ghost Actions (No clumsy white buttons)
+    const actions = header.createDiv({ cls: "aos-hermes-ghost-actions" });
+    const refreshBtn = actions.createEl("button", {
+      cls: "aos-hermes-ghost-btn",
+      attr: { type: "button", title: "刷新会话交互" },
+    });
+    const refIcon = refreshBtn.createSpan({ cls: "aos-hermes-ghost-icon" });
+    setIcon(refIcon, "rotate-cw");
+    refreshBtn.createSpan({ text: "刷新" });
     refreshBtn.addEventListener("click", () => void this.reloadCurrentSession());
 
     if (this.activeSessionId) {
-      const delBtn = actions.createEl("button", { cls: "aos-btn aos-btn-sm", text: "🗑️ 删除会话" });
+      const delBtn = actions.createEl("button", {
+        cls: "aos-hermes-ghost-btn is-danger",
+        attr: { type: "button", title: "删除此工造会话" },
+      });
+      const delIcon = delBtn.createSpan({ cls: "aos-hermes-ghost-icon" });
+      setIcon(delIcon, "trash-2");
+      delBtn.createSpan({ text: "删除会话" });
       delBtn.addEventListener("click", () => void this.handleDeleteSession());
     }
 
@@ -310,6 +318,10 @@ export class TasksPage {
         if (this.composerInputEl) {
           this.composerInputEl.value = p;
           this.composerInputEl.focus();
+          if (this.sendBtnEl) {
+            this.sendBtnEl.removeAttribute("disabled");
+            this.sendBtnEl.classList.add("is-active");
+          }
         }
       });
     }
@@ -363,26 +375,26 @@ export class TasksPage {
     const contentEl = bubble.createDiv({ cls: "aos-hermes-msg-content" });
     this.renderMarkdownWithWikilinks(contentEl, msg.content);
 
-    // Assistant Action Pills
+    // Assistant Action Pills (Refined Aetheric Style with Vector Icons)
     if (!isUser && msg.content) {
       const actions = bubble.createDiv({ cls: "aos-hermes-actions-row" });
 
       const pinBtn = actions.createEl("button", { cls: "aos-hermes-action-pill" });
-      const pinIcon = pinBtn.createSpan();
-      setIcon(pinIcon, "file-edit");
-      pinBtn.createSpan({ text: " 写入松果池" });
+      const pinIcon = pinBtn.createSpan({ cls: "aos-hermes-pill-icon" });
+      setIcon(pinIcon, "feather");
+      pinBtn.createSpan({ text: "写入松果池" });
       pinBtn.addEventListener("click", () => void this.writeToInbox(msg.content));
 
       const scheduleBtn = actions.createEl("button", { cls: "aos-hermes-action-pill" });
-      const calIcon = scheduleBtn.createSpan();
+      const calIcon = scheduleBtn.createSpan({ cls: "aos-hermes-pill-icon" });
       setIcon(calIcon, "calendar-plus");
-      scheduleBtn.createSpan({ text: " 挂入今日日程" });
+      scheduleBtn.createSpan({ text: "挂入今日日程" });
       scheduleBtn.addEventListener("click", () => void this.createScheduleFromText(msg.content));
 
       const copyBtn = actions.createEl("button", { cls: "aos-hermes-action-pill" });
-      const cpIcon = copyBtn.createSpan();
+      const cpIcon = copyBtn.createSpan({ cls: "aos-hermes-pill-icon" });
       setIcon(cpIcon, "copy");
-      copyBtn.createSpan({ text: " 复制正文" });
+      copyBtn.createSpan({ text: "复制正文" });
       copyBtn.addEventListener("click", () => {
         void navigator.clipboard.writeText(msg.content);
         new Notice("已复制到剪贴板");
@@ -412,11 +424,24 @@ export class TasksPage {
       attr: { placeholder: "向 Hermes 下达工造指令... (Enter 发送, Shift+Enter 换行)", rows: "2" },
     });
 
-    const sendBtn = inputBox.createEl("button", {
+    this.sendBtnEl = inputBox.createEl("button", {
       cls: "aos-hermes-send-btn",
-      attr: { type: "button", "aria-label": "发送指令" },
+      attr: { type: "button", "aria-label": "发送指令", disabled: "true" },
     });
-    setIcon(sendBtn, "arrow-up");
+    setIcon(this.sendBtnEl, "arrow-up");
+
+    const updateSendBtnState = () => {
+      const hasText = Boolean(this.composerInputEl.value.trim());
+      if (hasText && !this.isSending) {
+        this.sendBtnEl.removeAttribute("disabled");
+        this.sendBtnEl.classList.add("is-active");
+      } else {
+        this.sendBtnEl.setAttribute("disabled", "true");
+        this.sendBtnEl.classList.remove("is-active");
+      }
+    };
+
+    this.composerInputEl.addEventListener("input", updateSendBtnState);
 
     const doSend = () => {
       const text = this.composerInputEl.value.trim();
@@ -424,7 +449,7 @@ export class TasksPage {
       void this.handleSendMessage(text);
     };
 
-    sendBtn.addEventListener("click", doSend);
+    this.sendBtnEl.addEventListener("click", doSend);
     this.composerInputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -444,6 +469,7 @@ export class TasksPage {
       chip.addEventListener("click", () => {
         this.composerInputEl.value = `${p.prompt} \n`;
         this.composerInputEl.focus();
+        updateSendBtnState();
       });
     }
   }
@@ -525,6 +551,10 @@ export class TasksPage {
     }
 
     this.composerInputEl.value = "";
+    if (this.sendBtnEl) {
+      this.sendBtnEl.setAttribute("disabled", "true");
+      this.sendBtnEl.classList.remove("is-active");
+    }
     this.isSending = true;
     this.userScrolledUp = false;
 
@@ -558,6 +588,13 @@ export class TasksPage {
       new Notice(`发送失败: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       this.isSending = false;
+      if (this.composerInputEl && this.sendBtnEl) {
+        const hasText = Boolean(this.composerInputEl.value.trim());
+        if (hasText) {
+          this.sendBtnEl.removeAttribute("disabled");
+          this.sendBtnEl.classList.add("is-active");
+        }
+      }
     }
   }
 
