@@ -5889,18 +5889,92 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   box-sizing: border-box;
 }
 
+.aos-hermes-context-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .aos-hermes-context-chip {
   display: inline-flex;
   align-self: flex-start;
   align-items: center;
   gap: 5px;
-  padding: 2px 9px;
+  padding: 3px 10px;
   background: rgba(171, 118, 42, 0.08);
   border: 1px solid rgba(171, 118, 42, 0.2);
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
   color: var(--aos-gold, #a96f17);
+  box-shadow: 0 1px 3px rgba(91, 64, 30, 0.04);
+}
+
+.aos-hermes-context-chip.is-plan {
+  background: rgba(34, 153, 84, 0.08);
+  border-color: rgba(34, 153, 84, 0.25);
+  color: #1e7e43;
+}
+
+.aos-hermes-context-chip.is-inbox {
+  background: rgba(30, 105, 185, 0.08);
+  border-color: rgba(30, 105, 185, 0.22);
+  color: #165696;
+}
+
+.aos-hermes-plan-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.aos-hermes-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aos-hermes-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid rgba(171, 118, 42, 0.18);
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(91, 64, 30, 0.04);
+  transition: all 0.15s ease;
+  gap: 12px;
+}
+
+.aos-hermes-card-row:hover {
+  border-color: rgba(171, 118, 42, 0.36);
+  box-shadow: 0 3px 8px rgba(91, 64, 30, 0.08);
+}
+
+.aos-hermes-card-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.aos-hermes-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aos-text, #3d2b1f);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aos-hermes-card-meta {
+  font-size: 11px;
+  color: var(--aos-muted, #8c7355);
+  white-space: nowrap;
 }
 
 .aos-hermes-input-box {

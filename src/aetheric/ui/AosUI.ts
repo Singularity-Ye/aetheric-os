@@ -98,6 +98,8 @@ export interface AosActionPillOptions {
 export interface AosChatComposerOptions {
   placeholder?: string;
   activeNoteTitle?: string;
+  planPendingText?: string;
+  inboxPendingText?: string;
   presets?: Array<{ label: string; prompt: string }>;
   onSend: (text: string) => void;
 }
@@ -601,12 +603,27 @@ export class AosUI {
   } {
     const composer = parent.createDiv({ cls: "aos-hermes-composer" });
 
-    // Active Note context chip
-    if (options.activeNoteTitle) {
-      const chip = composer.createDiv({ cls: "aos-hermes-context-chip" });
-      const pin = chip.createSpan({ cls: "aos-hermes-chip-icon" });
-      setIcon(pin, "paperclip");
-      chip.createSpan({ text: `已挂载当前笔记: ${options.activeNoteTitle}` });
+    // Context chips (Active Note + Today Plan + Mobile Inbox perception)
+    if (options.activeNoteTitle || options.planPendingText || options.inboxPendingText) {
+      const chipsContainer = composer.createDiv({ cls: "aos-hermes-context-chips-container" });
+      if (options.activeNoteTitle) {
+        const chip = chipsContainer.createDiv({ cls: "aos-hermes-context-chip" });
+        const pin = chip.createSpan({ cls: "aos-hermes-chip-icon" });
+        setIcon(pin, "paperclip");
+        chip.createSpan({ text: `已挂载当前笔记: ${options.activeNoteTitle}` });
+      }
+      if (options.planPendingText) {
+        const planChip = chipsContainer.createDiv({ cls: "aos-hermes-context-chip is-plan" });
+        const cal = planChip.createSpan({ cls: "aos-hermes-chip-icon" });
+        setIcon(cal, "calendar");
+        planChip.createSpan({ text: options.planPendingText });
+      }
+      if (options.inboxPendingText) {
+        const inboxChip = chipsContainer.createDiv({ cls: "aos-hermes-context-chip is-inbox" });
+        const phone = inboxChip.createSpan({ cls: "aos-hermes-chip-icon" });
+        setIcon(phone, "smartphone");
+        inboxChip.createSpan({ text: options.inboxPendingText });
+      }
     }
 
     // Input box capsule
