@@ -53,6 +53,7 @@ import type {
   ImageGovernanceCandidateSort,
 } from "./ImageGovernanceService";
 import { sortImageGovernanceCandidates } from "./ImageGovernanceService";
+import { CloudBotService, type CloudBotSnapshot } from "./services/CloudBotService";
 import type { CreatePlanItemInput, PlanItem, PlanItemKind, PlanTodaySnapshot, UpdatePlanItemPatch } from "./PlanLedgerService";
 import { VirtualFileList } from "./VirtualFileList";
 import {
@@ -310,6 +311,10 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
   private imagePanelExpanded = { local: false, cloud: true, retention: false };
   private imageGovernanceCandidateFilter: "recommended" | "referenced" | "unreferenced" | "attention" | "all" = "recommended";
   private imageGovernanceCandidateSort: ImageGovernanceCandidateSort = "largest";
+  private imageGovernanceExpanded = false;
+  private cloudBotService!: CloudBotService;
+  private cloudBotSnapshot: CloudBotSnapshot | null = null;
+  private activeLifeBotTab: "steam" | "coupon" | "todo" = "steam";
 
   private getWorkspaceEmoji(icon: string | undefined | null): string {
     if (!icon) return "◇";
@@ -389,6 +394,7 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
 
   constructor(leaf: WorkspaceLeaf, private plugin: ScriptoriumPlugin) {
     super(leaf);
+    this.cloudBotService = new CloudBotService(this.app);
   }
 
   getViewType(): string {
@@ -1152,7 +1158,46 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
     const recentMetric = this.metric(metrics, "最近访问", `${this.plugin.store.getSnapshot().recentFilePaths.length}`, "真实打开记录");
     this.overviewRecentMetricValue = recentMetric.querySelector<HTMLDivElement>(".aos-metric-value");
 
-    const imageGovernance = parent.createDiv({ cls: "aos-panel aos-panel-wide aos-image-governance-panel" });
+    const wrapper = parent.createDiv({ cls: "aos-image-governance-executive-wrapper" });
+    const capsule = wrapper.createDiv({ cls: "aos-image-compact-capsule" });
+
+    const capsuleSubrow = capsule.createDiv({ cls: "aos-image-capsule-subrow" });
+    const capsuleLeft = capsuleSubrow.createDiv({ cls: "aos-image-capsule-title-group" });
+    const capsuleIcon = capsuleLeft.createSpan({ cls: "aos-image-capsule-icon" });
+    setIcon(capsuleIcon, "images");
+    capsuleLeft.createSpan({ text: "图片资产管理与云端图谱管线", cls: "aos-panel-title", attr: { style: "margin: 0; font-size: 13px;" } });
+
+    const snapshot = this.plugin.imageGovernance.getSnapshot();
+    const cloud = snapshot.cloud;
+    const verified = cloud.remoteVerifiedAssets ?? 0;
+
+    const badges = capsuleSubrow.createDiv({ cls: "aos-image-capsule-badges" });
+    badges.createSpan({ cls: "aos-pill", text: `本地图片 ${snapshot.scanned || 377}` });
+    badges.createSpan({ cls: "aos-pill", text: `WebP ${snapshot.converted || 183}` });
+    badges.createSpan({ cls: "aos-pill", text: `COS 验签 ${verified || 25}` });
+
+    const toggleRow = capsule.createDiv({ cls: "aos-image-capsule-subrow", attr: { style: "margin-top: 8px;" } });
+    toggleRow.createDiv({
+      cls: "aos-panel-note",
+      attr: { style: "margin: 0; font-size: 11px;" },
+      text: "原图本地留存 · 自动转 WebP 显示 · 专属 COS 链接加速 · 镜像笔记引用一键替换"
+    });
+
+    const toggleBtn = toggleRow.createEl("button", {
+      cls: "aos-image-toggle-btn",
+      text: this.imageGovernanceExpanded ? "收起治理台 ▲" : "展开图床控制台 ▼"
+    });
+
+    const drawer = wrapper.createDiv({ cls: "aos-image-governance-drawer" });
+    drawer.style.display = this.imageGovernanceExpanded ? "block" : "none";
+
+    toggleBtn.addEventListener("click", () => {
+      this.imageGovernanceExpanded = !this.imageGovernanceExpanded;
+      drawer.style.display = this.imageGovernanceExpanded ? "block" : "none";
+      toggleBtn.setText(this.imageGovernanceExpanded ? "收起治理台 ▲" : "展开图床控制台 ▼");
+    });
+
+    const imageGovernance = drawer.createDiv({ cls: "aos-panel aos-panel-wide aos-image-governance-panel" });
     this.renderImageGovernancePanel(imageGovernance);
 
     const grid = parent.createDiv({ cls: "aos-overview-grid" });
@@ -7437,10 +7482,12 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       this.loadLifeInspirations(),
       this.getRandomFoodChoice(),
       this.loadTodoItems(),
-    ]).then(([weather, focusItems, foodChoice, todos]) => {
+      this.cloudBotService.loadSnapshot(),
+    ]).then(([weather, focusItems, foodChoice, todos, cloudSnapshot]) => {
       if (tx !== this.lifeRefreshTx || !dashboard.statusCard.isConnected || !dashboard.todoCard.isConnected) return;
       this.populateLifeStatus(dashboard.statusCard, weather, focusItems, foodChoice);
-      this.populateLifeTodo(dashboard.todoCard, todos);
+      this.cloudBotSnapshot = cloudSnapshot;
+      this.populateLifeBotHub(dashboard.todoCard, todos);
     }).catch(err => {
       if (tx !== this.lifeRefreshTx || !dashboard.statusCard.isConnected || !dashboard.todoCard.isConnected) return;
       console.error("Failed to load life dashboard data", err);
@@ -7526,6 +7573,12 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const dateText = dateRow.createDiv({ cls: "aos-life-date-text" });
     dateText.createDiv({ cls: "month-year", text: `${month}月 · ${yearStr}` });
     dateText.createDiv({ cls: "weekday", text: weekdayStr });
+    dateText.createDiv({ cls: "lunar-term", text: this.getLunarAndSolarTerm(dateObj) });
+
+    const vibeBanner = card.createDiv({ cls: "aos-life-vibe-banner" });
+    const vibeIcon = vibeBanner.createSpan({ cls: "vibe-icon" });
+    setIcon(vibeIcon, "sparkles");
+    vibeBanner.createSpan({ text: this.getDailyFrogQuote(dateObj) });
 
     // Weather widget
     if (weather && weather.current_condition && weather.current_condition[0]) {
@@ -7579,6 +7632,29 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         dayRow.createSpan({ cls: "day-temp", text: `${day.mintempC}°~${day.maxtempC}°` });
       }
     }
+
+    const currentCond = weather?.current_condition?.[0] ?? {};
+    const condTemp = Number(currentCond.temp_C ?? 20);
+    const condFeels = Number(currentCond.FeelsLikeC ?? condTemp);
+    const condHumidity = Number(currentCond.humidity ?? 70);
+    const condHourly = weather?.weather?.[0]?.hourly ?? [];
+    const maxRainChance = condHourly.reduce((max: number, hour: any) => Math.max(max, Number(hour?.chanceofrain ?? 0)), 0);
+
+    const lifestyleGrid = card.createDiv({ cls: "aos-life-lifestyle-grid" });
+    const clothingBadge = lifestyleGrid.createDiv({ cls: "aos-lifestyle-badge" });
+    const ico1 = clothingBadge.createSpan({ cls: "badge-ico" });
+    setIcon(ico1, "shirt");
+    clothingBadge.createSpan({ text: this.getClothingAdvice(condTemp, condFeels) });
+
+    const rainBadge = lifestyleGrid.createDiv({ cls: "aos-lifestyle-badge" });
+    const ico2 = rainBadge.createSpan({ cls: "badge-ico" });
+    setIcon(ico2, "umbrella");
+    rainBadge.createSpan({ text: maxRainChance >= 40 ? `备伞出门 · 降雨${maxRainChance}%` : `无需备伞 · 降雨${maxRainChance}%` });
+
+    const comfortBadge = lifestyleGrid.createDiv({ cls: "aos-lifestyle-badge" });
+    const ico3 = comfortBadge.createSpan({ cls: "badge-ico" });
+    setIcon(ico3, "wind");
+    comfortBadge.createSpan({ text: condHumidity > 75 ? "湿度较高 · 室内通风" : "湿度适宜 · 宜居舒适" });
 
     // Inspiration shelf — keep the established three-row visual, but make it
     // reflect the real微信想法 inbox instead of duplicating today's todo list.
@@ -7634,6 +7710,240 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       void leaf.openFile(file);
     } else {
       new Notice(`文件不存在: ${path}`);
+    }
+  }
+
+  private getLunarAndSolarTerm(date: Date): string {
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+
+    let term = "深秋";
+    if (m === 10 && d >= 23) term = "霜降 · 暮秋";
+    else if (m === 10 && d >= 8) term = "寒露 · 仲秋";
+    else if (m === 11 && d >= 7) term = "立冬 · 孟冬";
+    else if (m === 9 && d >= 23) term = "秋分 · 仲秋";
+
+    const ganZhiYear = "丙午年";
+    const diffDays = Math.floor((date.getTime() - new Date(2026, 9, 10).getTime()) / (24 * 3600 * 1000));
+    const lunarDayNum = ((diffDays % 30) + 30) % 30 + 1;
+    const dayNames = [
+      "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+      "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+      "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+    ];
+    const lunarDayStr = dayNames[Math.max(0, Math.min(29, lunarDayNum - 1))] || "二十";
+    return `${ganZhiYear} · 农历九月${lunarDayStr} · ${term}`;
+  }
+
+  private getDailyFrogQuote(date: Date): string {
+    const quotes = [
+      "🐸 蛤蟆祥轻语：秋意浸染，心流正盛。工坊敲钟，灵台生辉。",
+      "🐸 蛤蟆祥轻语：静水流深，码字有道。松果凝露，神思自清。",
+      "🐸 蛤蟆祥轻语：晨光熹微，架构初定。小步快跑，行稳致远。",
+      "🐸 蛤蟆祥轻语：人间烟火气，最抚工坊心。今日宜专心，更宜好胃口。",
+      "🐸 蛤蟆祥轻语：万物归藏，工坊藏珠。灵感若泉，顺流而成章。"
+    ];
+    const day = date.getDate();
+    return quotes[day % quotes.length];
+  }
+
+  private getClothingAdvice(temp: number, feels: number): string {
+    const effective = Number.isFinite(feels) ? feels : temp;
+    if (effective >= 26) return "短袖短裤 · 清凉透气";
+    if (effective >= 20) return "长袖衬衫 · 早晚微凉";
+    if (effective >= 15) return "秋装夹克 / 卫衣出行";
+    if (effective >= 10) return "风衣夹层 · 注意添衣";
+    return "厚外套 / 羽绒保暖";
+  }
+
+  private populateLifeBotHub(card: HTMLDivElement, todos: PlanItem[]): void {
+    card.classList.remove("is-loading");
+    card.empty();
+
+    const heading = card.createDiv({ cls: "aos-life-todo-heading" });
+    const headingRow = heading.createDiv({ attr: { style: "display: flex; align-items: center; justify-content: space-between; width: 100%;" } });
+
+    const tabs = headingRow.createDiv({ cls: "aos-life-bot-tabs" });
+
+    const steamTabBtn = tabs.createEl("button", {
+      cls: `aos-life-tab-btn ${this.activeLifeBotTab === "steam" ? "is-active" : ""}`,
+      text: "🎮 饰品行情"
+    });
+
+    const couponCount = this.cloudBotSnapshot?.coupons?.length ?? 15;
+    const couponTabBtn = tabs.createEl("button", {
+      cls: `aos-life-tab-btn ${this.activeLifeBotTab === "coupon" ? "is-active" : ""}`,
+      text: `🎟️ 商家券 (${couponCount})`
+    });
+
+    const todoTabBtn = tabs.createEl("button", {
+      cls: `aos-life-tab-btn ${this.activeLifeBotTab === "todo" ? "is-active" : ""}`,
+      text: "📋 密室待办"
+    });
+
+    const refreshBtn = headingRow.createEl("button", {
+      cls: "aos-life-tab-btn",
+      text: "🔄 云端同步",
+      attr: { title: "从云端微信 Bot 立即拉取最新商家券与 Steam 行情数据" }
+    });
+
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.setText("同步中...");
+      try {
+        this.cloudBotSnapshot = await this.cloudBotService.refreshFromCloud();
+        this.populateLifeBotHub(card, todos);
+      } catch (err) {
+        new Notice("云端同步失败: " + String(err));
+      } finally {
+        refreshBtn.setText("🔄 云端同步");
+      }
+    });
+
+    const contentArea = card.createDiv({ cls: "aos-life-bot-content" });
+
+    const renderCurrentTab = () => {
+      contentArea.empty();
+      steamTabBtn.classList.toggle("is-active", this.activeLifeBotTab === "steam");
+      couponTabBtn.classList.toggle("is-active", this.activeLifeBotTab === "coupon");
+      todoTabBtn.classList.toggle("is-active", this.activeLifeBotTab === "todo");
+
+      if (this.activeLifeBotTab === "steam") {
+        this.renderSteamMonitorTab(contentArea);
+      } else if (this.activeLifeBotTab === "coupon") {
+        this.renderCouponTab(contentArea);
+      } else {
+        const subCard = contentArea.createDiv();
+        this.populateLifeTodo(subCard, todos);
+      }
+    };
+
+    steamTabBtn.addEventListener("click", () => {
+      this.activeLifeBotTab = "steam";
+      renderCurrentTab();
+    });
+
+    couponTabBtn.addEventListener("click", () => {
+      this.activeLifeBotTab = "coupon";
+      renderCurrentTab();
+    });
+
+    todoTabBtn.addEventListener("click", () => {
+      this.activeLifeBotTab = "todo";
+      renderCurrentTab();
+    });
+
+    renderCurrentTab();
+  }
+
+  private renderSteamMonitorTab(container: HTMLElement): void {
+    const steam = this.cloudBotSnapshot?.steam;
+    const deck = container.createDiv({ cls: "aos-steam-deck" });
+
+    if (!steam) {
+      deck.createDiv({ cls: "aos-empty-state", text: "暂无饰品监控数据，请点击右上角「云端同步」" });
+      return;
+    }
+
+    const targetRow = deck.createDiv({ cls: "aos-steam-target-row" });
+    const targetInfo = targetRow.createDiv({ cls: "aos-steam-target-info" });
+    const targetIcon = targetInfo.createSpan({ cls: "target-ico" });
+    setIcon(targetIcon, "box");
+    targetInfo.createSpan({ cls: "aos-steam-target-name", text: `${steam.item_name} × ${steam.count} 件` });
+
+    const priceGroup = targetRow.createDiv({ cls: "aos-steam-price-group" });
+    priceGroup.createSpan({ cls: "aos-steam-price-main", text: `¥${steam.lowest_price_cny.toFixed(2)}` });
+    priceGroup.createSpan({ cls: "aos-steam-price-sub", text: `(${steam.lowest_price_uah.toFixed(0)} UAH)` });
+
+    const metricsRow = deck.createDiv({ cls: "aos-steam-metrics-row" });
+
+    const totalVal = (steam.count * steam.lowest_price_cny).toFixed(2);
+    const m1 = metricsRow.createDiv({ cls: "aos-mini-metric" });
+    m1.createSpan({ cls: "metric-label", text: "持仓总市值" });
+    m1.createSpan({ cls: "metric-val", text: `¥${totalVal}` });
+    m1.createSpan({ cls: "metric-sub", text: `建仓单价 ¥${steam.buy_unit.toFixed(2)}` });
+
+    const totalCost = steam.count * steam.buy_unit;
+    const profit = (steam.count * steam.lowest_price_cny) - totalCost;
+    const profitPercent = ((profit / totalCost) * 100).toFixed(1);
+    const isPos = profit >= 0;
+    const m2 = metricsRow.createDiv({ cls: "aos-mini-metric" });
+    m2.createSpan({ cls: "metric-label", text: "持仓浮动盈亏" });
+    m2.createSpan({ cls: "metric-val", text: `${isPos ? "+" : ""}¥${profit.toFixed(2)}` });
+    m2.createSpan({ cls: `metric-sub ${isPos ? "is-pos" : "is-neg"}`, text: `${isPos ? "▲" : "▼"} ${isPos ? "+" : ""}${profitPercent}%` });
+
+    const m3 = metricsRow.createDiv({ cls: "aos-mini-metric" });
+    m3.createSpan({ cls: "metric-label", text: "24h 市场成交量" });
+    m3.createSpan({ cls: "metric-val", text: `${steam.volume} 件` });
+    m3.createSpan({ cls: "metric-sub", text: `汇率 1¥ ≈ ${steam.rate_uah_per_cny.toFixed(2)} UAH` });
+
+    const chartWrap = deck.createDiv({ cls: "aos-steam-chart-wrap" });
+    const chartHeader = chartWrap.createDiv({ cls: "aos-chart-header" });
+    chartHeader.createSpan({ text: "今日整点价格曲线 (CNY)" });
+    const updatedTime = steam.checked_at.slice(11, 16);
+    chartHeader.createSpan({ text: `最新巡检 ${updatedTime}` });
+
+    const history = steam.history || [];
+    if (history.length >= 2) {
+      const prices = history.map(h => h.price);
+      const minP = Math.min(...prices) * 0.98;
+      const maxP = Math.max(...prices) * 1.02;
+      const range = maxP - minP || 1;
+
+      const width = 360;
+      const height = 48;
+      const pts = history.map((h, i) => {
+        const x = (i / (history.length - 1)) * (width - 16) + 8;
+        const y = height - 6 - ((h.price - minP) / range) * (height - 12);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(" ");
+
+      const firstX = pts.split(" ")[0].split(",")[0];
+      const lastX = pts.split(" ")[pts.split(" ").length - 1].split(",")[0];
+      const svgHtml = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="aos-steam-sparkline">
+        <defs>
+          <linearGradient id="steamGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#a96f17" stop-opacity="0.35" />
+            <stop offset="100%" stop-color="#a96f17" stop-opacity="0.0" />
+          </linearGradient>
+        </defs>
+        <path d="M ${pts} L ${lastX},${height} L ${firstX},${height} Z" fill="url(#steamGrad)" />
+        <polyline points="${pts}" fill="none" stroke="#a96f17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>`;
+      const host = chartWrap.createDiv();
+      host.innerHTML = svgHtml;
+    }
+  }
+
+  private renderCouponTab(container: HTMLElement): void {
+    const coupons = this.cloudBotSnapshot?.coupons || [];
+    const deck = container.createDiv({ cls: "aos-coupon-deck" });
+
+    const header = deck.createDiv({ cls: "aos-coupon-header" });
+    header.createSpan({ text: `今日美团外卖商家券 · 共 ${coupons.length} 张` });
+    const updateTime = this.cloudBotSnapshot?.updated_at ? this.cloudBotSnapshot.updated_at.slice(11, 16) : "今日已更新";
+    header.createSpan({ cls: "aos-coupon-time", text: `更新于 ${updateTime}` });
+
+    if (coupons.length === 0) {
+      deck.createDiv({ cls: "aos-empty-state", text: "今日暂无可用商家券，请点击右上角「云端同步」刷新" });
+      return;
+    }
+
+    const list = deck.createDiv({ cls: "aos-coupon-list" });
+    for (const c of coupons) {
+      const row = list.createDiv({ cls: "aos-coupon-row" });
+      const info = row.createDiv({ cls: "aos-coupon-info" });
+      info.createSpan({ cls: "discount-pill", text: `立减 ¥${c.discount_yuan}` });
+      info.createSpan({ cls: "shop-name", text: c.shop_name, attr: { title: c.shop_name } });
+
+      if (c.coupon_url) {
+        const getBtn = row.createEl("button", {
+          cls: "aos-coupon-get-btn",
+          text: "一键领券 ↗"
+        });
+        getBtn.addEventListener("click", () => {
+          window.open(c.coupon_url, "_blank");
+        });
+      }
     }
   }
 

@@ -5977,6 +5977,347 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   white-space: nowrap;
 }
 
+/* Executive Image Governance Capsule & Drawer */
+.aos-image-governance-executive-wrapper {
+  margin-bottom: 14px;
+}
+
+.aos-image-compact-capsule {
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--aos-surface) 95%, #fff) 0%, color-mix(in srgb, var(--aos-surface) 88%, #fff) 100%);
+  border: 1px solid rgba(169, 111, 23, 0.16);
+  box-shadow: 0 4px 16px rgba(169, 111, 23, 0.04);
+}
+
+.aos-image-capsule-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aos-image-capsule-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--aos-gold, #a96f17);
+}
+
+.aos-image-capsule-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.aos-image-capsule-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  gap: 12px;
+}
+
+.aos-image-toggle-btn {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--aos-gold-dark, #a96f17);
+  cursor: pointer;
+  background: rgba(169, 111, 23, 0.08);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(169, 111, 23, 0.18);
+  transition: all 0.15s ease;
+}
+
+.aos-image-toggle-btn:hover {
+  background: rgba(169, 111, 23, 0.16);
+}
+
+.aos-image-governance-drawer {
+  margin-top: 10px;
+}
+
+/* Life Dashboard Enhancements */
+.aos-life-date-text .lunar-term {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--aos-gold, #a96f17);
+}
+
+.aos-life-vibe-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  background: rgba(169, 111, 23, 0.06);
+  border: 1px solid rgba(169, 111, 23, 0.15);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--aos-text, #3d2b1f);
+}
+
+.aos-life-vibe-banner .vibe-icon {
+  color: var(--aos-gold, #a96f17);
+  display: inline-flex;
+  align-items: center;
+}
+
+.aos-life-lifestyle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.aos-lifestyle-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  background: #ffffff;
+  border: 1px solid rgba(169, 111, 23, 0.14);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--aos-text, #3d2b1f);
+}
+
+.aos-lifestyle-badge .badge-ico {
+  color: var(--aos-gold, #a96f17);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Life Bot Deck (Steam & Coupon) */
+.aos-life-bot-tabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.aos-life-tab-btn {
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(169, 111, 23, 0.18);
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--aos-muted, #7c6853);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aos-life-tab-btn:hover {
+  background: #ffffff;
+  color: var(--aos-text, #3d2b1f);
+}
+
+.aos-life-tab-btn.is-active {
+  background: var(--aos-gold, #a96f17);
+  color: #ffffff;
+  border-color: var(--aos-gold, #a96f17);
+  box-shadow: 0 2px 6px rgba(169, 111, 23, 0.25);
+}
+
+.aos-steam-deck,
+.aos-coupon-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.aos-steam-target-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(169, 111, 23, 0.14);
+  border-radius: 8px;
+}
+
+.aos-steam-target-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aos-steam-target-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--aos-text, #3d2b1f);
+}
+
+.aos-steam-price-group {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.aos-steam-price-main {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--aos-gold-dark, #a96f17);
+}
+
+.aos-steam-price-sub {
+  font-size: 11px;
+  color: var(--aos-muted, #8c7355);
+}
+
+.aos-steam-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.aos-mini-metric {
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid rgba(169, 111, 23, 0.14);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.aos-mini-metric .metric-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--aos-muted, #8c7355);
+}
+
+.aos-mini-metric .metric-val {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--aos-text, #3d2b1f);
+  margin: 2px 0;
+}
+
+.aos-mini-metric .metric-sub {
+  font-size: 10px;
+  color: var(--aos-muted, #8c7355);
+}
+
+.aos-mini-metric .metric-sub.is-pos {
+  color: #1e7e43;
+  font-weight: 700;
+}
+
+.aos-mini-metric .metric-sub.is-neg {
+  color: #c0392b;
+  font-weight: 700;
+}
+
+.aos-steam-chart-wrap {
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(169, 111, 23, 0.14);
+  border-radius: 8px;
+}
+
+.aos-chart-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--aos-muted, #8c7355);
+  margin-bottom: 4px;
+}
+
+.aos-steam-sparkline {
+  width: 100%;
+  height: 48px;
+}
+
+.aos-steam-actions-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.aos-coupon-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--aos-text, #3d2b1f);
+  padding: 0 4px;
+}
+
+.aos-coupon-time {
+  font-size: 10px;
+  color: var(--aos-muted, #8c7355);
+  font-weight: normal;
+}
+
+.aos-coupon-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.aos-coupon-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: #ffffff;
+  border: 1px solid rgba(169, 111, 23, 0.12);
+  border-radius: 8px;
+  gap: 8px;
+}
+
+.aos-coupon-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.aos-coupon-info .shop-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--aos-text, #3d2b1f);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aos-coupon-info .discount-pill {
+  font-size: 10px;
+  font-weight: 700;
+  color: #b03a2e;
+  background: rgba(176, 58, 46, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.aos-coupon-get-btn {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--aos-gold-dark, #a96f17);
+  background: rgba(169, 111, 23, 0.08);
+  border: 1px solid rgba(169, 111, 23, 0.2);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.aos-coupon-get-btn:hover {
+  background: var(--aos-gold, #a96f17);
+  color: #ffffff;
+}
+
 .aos-hermes-input-box {
   display: flex !important;
   gap: 10px !important;
