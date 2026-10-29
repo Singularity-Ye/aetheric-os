@@ -7308,7 +7308,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     this.refreshLifeDashboard();
   }
 
-  private async addTodoItem(text: string): Promise<void> {
+  private async addTodoItem(text: string, sourceNotePath?: string): Promise<void> {
     const title = text.trim();
     if (!title) return;
     await this.plugin.planLedger.createPlanItem({
@@ -7318,6 +7318,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       scheduled: false,
       start: "09:00",
       end: "10:00",
+      ...(sourceNotePath ? { sourceNotePath } : {}),
     });
     this.refreshLifeDashboard();
   }
@@ -7582,14 +7583,13 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     setIcon(vibeIcon, "sparkles");
     const quoteTextSpan = vibeBanner.createSpan({ cls: "vibe-text", text: this.getDailyFrogQuote(dateObj, this.quoteIndex) });
     vibeBanner.setAttribute("title", "点击切换心流妙语");
-    vibeBanner.style.cursor = "pointer";
     vibeBanner.addEventListener("click", () => {
       this.quoteIndex = (this.quoteIndex < 0 ? dateObj.getDate() + 1 : this.quoteIndex + 1) % this.frogQuotesPool.length;
-      quoteTextSpan.style.opacity = "0.2";
+      quoteTextSpan.addClass("is-fading");
       setTimeout(() => {
         quoteTextSpan.setText(this.getDailyFrogQuote(dateObj, this.quoteIndex));
-        quoteTextSpan.style.opacity = "1";
-      }, 120);
+        quoteTextSpan.removeClass("is-fading");
+      }, 160);
     });
 
     // Weather widget
@@ -7668,12 +7668,11 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     setIcon(ico3, "wind");
     comfortBadge.createSpan({ text: condHumidity > 75 ? "湿度较高 · 室内通风" : "湿度适宜 · 宜居舒适" });
 
-    // Inspiration shelf — keep the established three-row visual, but make it
-    // reflect the real微信想法 inbox instead of duplicating today's todo list.
+    // Inspiration shelf
     const focusTitle = card.createDiv({ cls: "aos-life-sub-title aos-life-icon-title" });
     const focusTitleIcon = focusTitle.createSpan({ cls: "aos-life-title-icon" });
     setIcon(focusTitleIcon, "lightbulb");
-    focusTitle.createSpan({ text: "灵感集" });
+    focusTitle.createSpan({ text: "灵感集 · 候选池" });
     const focusContainer = card.createDiv({ cls: "aos-life-focus-list" });
     for (let index = 0; index < 3; index += 1) {
       const item = focusItems[index] ?? { completed: false, text: "" };
@@ -7682,7 +7681,24 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         itemEl.classList.add("is-empty");
         itemEl.textContent = `0${index + 1}  ·  灵感收件箱暂无条目`;
       } else {
-        itemEl.textContent = `✦  ${item.text}`;
+        const bullet = itemEl.createSpan({ cls: "focus-bullet", text: "✦ " });
+        itemEl.createSpan({ cls: "focus-text", text: item.text });
+
+        const pinBtn = itemEl.createEl("button", {
+          cls: "aos-focus-pin-btn",
+          attr: { title: "挂入今日行动：作为今日专注攻坚项并联动 AI 研产" }
+        });
+        const pinIco = pinBtn.createSpan({ cls: "pin-ico" });
+        setIcon(pinIco, "pin");
+        pinBtn.createSpan({ text: "设为行动" });
+
+        pinBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          pinBtn.setText("已挂载 ✓");
+          await this.addTodoItem(item.text, item.path);
+          new Notice(`已将灵感《${item.text}》设为今日行动待办！`);
+          this.activeLifeBotTab = "todo";
+        });
       }
       itemEl.addEventListener("click", () => {
         if (item.path) {
@@ -7700,12 +7716,12 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const foodIconSpan = foodRow.createSpan({ cls: "food-ico" });
     setIcon(foodIconSpan, "utensils");
 
-    const coupons = this.cloudBotSnapshot?.coupons || [];
     const renderFoodRow = () => {
       while (foodRow.childNodes.length > 1) {
         if (foodRow.lastChild) foodRow.removeChild(foodRow.lastChild);
       }
 
+      const coupons = this.cloudBotSnapshot?.coupons || [];
       if (coupons.length > 0) {
         const coupon = coupons[this.currentCouponIndex % coupons.length];
         foodRow.createSpan({ cls: "food-label", text: "惠选外卖：" });
@@ -7744,6 +7760,12 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         setIcon(refreshBtn, "rotate-cw");
         refreshBtn.addEventListener("click", async () => {
           refreshBtn.classList.add("is-spinning");
+          const snap = await this.cloudBotService.loadSnapshot();
+          if (snap && snap.coupons && snap.coupons.length > 0) {
+            this.cloudBotSnapshot = snap;
+            renderFoodRow();
+            return;
+          }
           const newFood = await this.getRandomFoodChoice();
           foodName.textContent = newFood;
           setTimeout(() => refreshBtn.classList.remove("is-spinning"), 600);

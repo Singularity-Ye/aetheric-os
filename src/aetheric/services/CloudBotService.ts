@@ -1,4 +1,4 @@
-import { App, Notice } from "obsidian";
+import { App, Notice, normalizePath } from "obsidian";
 import * as path from "path";
 
 export interface CouponItem {
@@ -47,10 +47,19 @@ export class CloudBotService {
   async loadSnapshot(autoRefreshIfStale = true, onUpdated?: (snap: CloudBotSnapshot) => void): Promise<CloudBotSnapshot | null> {
     let snapshot: CloudBotSnapshot | null = null;
     try {
+      const normalized = normalizePath(this.snapshotPath);
       const adapter = this.app.vault.adapter;
-      if (await adapter.exists(this.snapshotPath)) {
-        const raw = await adapter.read(this.snapshotPath);
+      if (await adapter.exists(normalized)) {
+        const raw = await adapter.read(normalized);
         snapshot = JSON.parse(raw) as CloudBotSnapshot;
+      } else if (typeof window !== "undefined" && (window as any).require) {
+        const fs = (window as any).require("fs");
+        const nodePath = (window as any).require("path");
+        const basePath = (this.app.vault.adapter as any).basePath || (this.app.vault.adapter as any).getBasePath?.() || "";
+        const fullPath = nodePath.join(basePath, this.snapshotPath);
+        if (fs.existsSync(fullPath)) {
+          snapshot = JSON.parse(fs.readFileSync(fullPath, "utf8")) as CloudBotSnapshot;
+        }
       }
     } catch (e) {
       console.warn("[CloudBotService] Failed to load local snapshot:", e);

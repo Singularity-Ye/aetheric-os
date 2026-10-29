@@ -6539,3 +6539,112 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
   box-shadow: 0 2px 6px rgba(169, 111, 23, 0.12) !important;
   transform: translateY(-0.5px) !important;
 }
+
+/* --------------------------------------------------------------------------
+   AREA 6: 纯净文人美学——祛 Emoji 矢量图标与平滑微动
+   -------------------------------------------------------------------------- */
+.aos-nav-section-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: var(--aos-ink-muted, #766b60) !important;
+  letter-spacing: 0.05em !important;
+}
+
+.aos-section-ico {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--aos-gold, #a96f17) !important;
+}
+
+.aos-section-ico svg {
+  width: 12px !important;
+  height: 12px !important;
+  stroke-width: 2.2 !important;
+}
+
+.aos-pillar-pinned-star {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--aos-gold, #a96f17) !important;
+  margin-left: 4px !important;
+}
+
+.aos-pillar-pinned-star svg {
+  width: 11px !important;
+  height: 11px !important;
+  stroke-width: 2.2 !important;
+}
+
+/* 心流妙语平滑淡入淡出动效 */
+.aos-life-vibe-banner {
+  user-select: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  overflow: hidden !important;
+}
+.aos-life-vibe-banner:hover {
+  background: rgba(169, 111, 23, 0.1) !important;
+  border-color: rgba(169, 111, 23, 0.32) !important;
+  transform: translateY(-0.5px) !important;
+}
+.aos-life-vibe-banner .vibe-text {
+  display: inline-block !important;
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  will-change: opacity, transform !important;
+}
+.aos-life-vibe-banner .vibe-text.is-fading {
+  opacity: 0 !important;
+  transform: translateY(-4px) !important;
+}
+
+/* 灵感挂入今日行动小按钮 */
+.aos-life-focus-item {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+.aos-life-focus-item .focus-bullet {
+  color: var(--aos-gold, #a96f17) !important;
+  margin-right: 6px !important;
+  font-size: 11px !important;
+}
+.aos-life-focus-item .focus-text {
+  flex: 1 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.aos-focus-pin-btn {
+  display: none !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 1px 7px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(171, 118, 42, 0.25) !important;
+  background: rgba(255, 252, 245, 0.95) !important;
+  color: var(--aos-gold-dark, #a96f17) !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  transition: all 0.15s ease !important;
+}
+.aos-life-focus-item:hover .aos-focus-pin-btn {
+  display: inline-flex !important;
+}
+.aos-focus-pin-btn:hover {
+  background: var(--aos-gold, #a96f17) !important;
+  color: #ffffff !important;
+  border-color: var(--aos-gold, #a96f17) !important;
+  transform: scale(1.02) !important;
+}
+.aos-focus-pin-btn .pin-ico svg {
+  width: 10px !important;
+  height: 10px !important;
+  stroke-width: 2.2 !important;
+}

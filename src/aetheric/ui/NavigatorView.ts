@@ -80,10 +80,13 @@ export class NavigatorView {
       return;
     }
 
-    // 1. Pinned Folders (★ 常用置顶目录)
+    // 1. Pinned Folders (常用置顶目录)
     const pinnedSection = this.containerEl!.createDiv({ cls: "aos-nav-section aos-pinned-section" });
     const pinnedHeader = pinnedSection.createDiv({ cls: "aos-section-header" });
-    pinnedHeader.createDiv({ cls: "aos-nav-section-title", text: "★ 常用置顶目录" });
+    const pinnedTitle = pinnedHeader.createDiv({ cls: "aos-nav-section-title" });
+    const pinnedIco = pinnedTitle.createSpan({ cls: "aos-section-ico" });
+    setIcon(pinnedIco, "pin");
+    pinnedTitle.createSpan({ text: "常用置顶" });
     const addPinBtn = pinnedHeader.createEl("button", {
       cls: "aos-quick-add-btn",
       text: "+",
@@ -101,10 +104,13 @@ export class NavigatorView {
       }
     }
 
-    // 2. Pillars & Schools Tree (🏛️ 松果阁四大圣地体系)
+    // 2. Pillars & Schools Tree (松果阁四大圣地体系)
     const pillarsSection = this.containerEl!.createDiv({ cls: "aos-nav-section aos-pillars-section" });
     const pillarsHeader = pillarsSection.createDiv({ cls: "aos-section-header" });
-    pillarsHeader.createDiv({ cls: "aos-nav-section-title", text: "🏛️ 松果阁体系" });
+    const pillarsTitle = pillarsHeader.createDiv({ cls: "aos-nav-section-title" });
+    const pillarsIco = pillarsTitle.createSpan({ cls: "aos-section-ico" });
+    setIcon(pillarsIco, "landmark");
+    pillarsTitle.createSpan({ text: "松果阁体系" });
 
     const treeContainer = pillarsSection.createDiv({ cls: "aos-pillars-tree" });
     const expandedSet = new Set<string>(state.expandedFolderPaths);
@@ -116,10 +122,13 @@ export class NavigatorView {
       }
     }
 
-    // 3. Quick Tools (⚡ 快捷工具)
+    // 3. Quick Tools (快捷工具)
     const quick = this.containerEl!.createDiv({ cls: "aos-nav-section aos-quick-section" });
     const quickHeader = quick.createDiv({ cls: "aos-section-header" });
-    quickHeader.createDiv({ cls: "aos-nav-section-title", text: "⚡ 快捷工具" });
+    const quickTitle = quickHeader.createDiv({ cls: "aos-nav-section-title" });
+    const quickIco = quickTitle.createSpan({ cls: "aos-section-ico" });
+    setIcon(quickIco, "zap");
+    quickTitle.createSpan({ text: "快捷工具" });
 
     const recentButton = this.renderQuickButton(quick, "最近访问", `${state.recentFilePaths.length}`, "history", () => this.context.showRecentFiles());
     recentButton.dataset.aosQuick = "recent";
@@ -187,7 +196,7 @@ export class NavigatorView {
       event.stopPropagation();
       const menu = new Menu();
       menu.addItem((item: any) => {
-        item.setTitle("★ 从常用置顶移除")
+        item.setTitle("从常用置顶移除")
           .setIcon("star-off")
           .onClick(() => this.context.toggleFavoriteFolder(folderPath));
       });
@@ -249,7 +258,8 @@ export class NavigatorView {
     const favoriteFolderPaths = this.context.plugin.store.getSnapshot().favoriteFolderPaths || [];
     const isFav = favoriteFolderPaths.includes(folder.path);
     if (isFav) {
-      const star = row.createSpan({ cls: "aos-pillar-pinned-star", text: "★" });
+      const star = row.createSpan({ cls: "aos-pillar-pinned-star" });
+      setIcon(star, "pin");
       star.setAttribute("title", "已置顶到常用");
     }
 
@@ -260,7 +270,7 @@ export class NavigatorView {
       event.stopPropagation();
       const menu = new Menu();
       menu.addItem((item: any) => {
-        item.setTitle(isFav ? "★ 从常用置顶移除" : "★ 固定到常用置顶")
+        item.setTitle(isFav ? "从常用置顶移除" : "固定到常用置顶")
           .setIcon(isFav ? "star-off" : "star")
           .onClick(() => this.context.toggleFavoriteFolder(folder.path));
       });
@@ -373,7 +383,7 @@ export class NavigatorView {
       event.stopPropagation();
       const menu = new Menu();
       menu.addItem((item: any) => {
-        item.setTitle(isFav ? "★ 从快捷访问移除" : "☆ 添加至快捷访问")
+        item.setTitle(isFav ? "从快捷访问移除" : "添加至快捷访问")
           .setIcon("star")
           .onClick(() => this.context.toggleFavoriteFolder(folder.path));
       });
