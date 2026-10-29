@@ -6098,27 +6098,88 @@ body.aetheric-os-shell-active .aos-shell.aos-hide-context-pane .aos-context-pane
 }
 
 .aos-life-tab-btn {
-  padding: 3px 9px;
-  border-radius: 6px;
-  border: 1px solid rgba(169, 111, 23, 0.18);
-  background: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--aos-muted, #7c6853);
-  cursor: pointer;
-  transition: all 0.15s ease;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(171, 118, 42, 0.22) !important;
+  background: rgba(255, 252, 245, 0.88) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: var(--aos-ink-muted, #766b60) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  line-height: 1 !important;
+}
+
+.aos-life-tab-btn .tab-ico {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: inherit !important;
+}
+
+.aos-life-tab-btn .tab-ico svg {
+  width: 13px !important;
+  height: 13px !important;
+  stroke-width: 2.2 !important;
+}
+
+.aos-life-tab-btn .tab-badge {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  padding: 1px 5px !important;
+  border-radius: 999px !important;
+  background: rgba(169, 111, 23, 0.12) !important;
+  color: var(--aos-gold-dark, #a96f17) !important;
 }
 
 .aos-life-tab-btn:hover {
-  background: #ffffff;
-  color: var(--aos-text, #3d2b1f);
+  background: #ffffff !important;
+  color: var(--aos-gold, #a96f17) !important;
+  border-color: rgba(171, 118, 42, 0.45) !important;
+  box-shadow: 0 1px 4px rgba(169, 111, 23, 0.1) !important;
+  transform: translateY(-0.5px) !important;
 }
 
 .aos-life-tab-btn.is-active {
-  background: var(--aos-gold, #a96f17);
-  color: #ffffff;
-  border-color: var(--aos-gold, #a96f17);
-  box-shadow: 0 2px 6px rgba(169, 111, 23, 0.25);
+  background: linear-gradient(135deg, #c78d2a 0%, #a4670f 100%) !important;
+  color: #ffffff !important;
+  border-color: #a4670f !important;
+  box-shadow: 0 2px 6px rgba(169, 111, 23, 0.28) !important;
+}
+
+.aos-life-tab-btn.is-active .tab-badge {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.aos-life-refresh-action {
+  margin-left: auto;
+}
+
+.aos-life-food-recommend {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 7px 12px !important;
+  border-radius: 8px !important;
+  background: rgba(255, 252, 245, 0.88) !important;
+  border: 1px solid rgba(171, 118, 42, 0.2) !important;
+  font-size: 11px !important;
+  margin-top: 8px !important;
+}
+
+.aos-life-food-recommend .food-ico {
+  color: var(--aos-gold, #a96f17) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.aos-life-food-recommend .food-ico svg {
+  width: 14px !important;
+  height: 14px !important;
 }
 
 .aos-steam-deck,

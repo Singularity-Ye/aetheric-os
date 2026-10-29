@@ -315,6 +315,8 @@ export class AethericShellView extends ItemView implements AethericShellHistoryH
   private cloudBotService!: CloudBotService;
   private cloudBotSnapshot: CloudBotSnapshot | null = null;
   private activeLifeBotTab: "steam" | "coupon" | "todo" = "steam";
+  private quoteIndex = -1;
+  private currentCouponIndex = 0;
 
   private getWorkspaceEmoji(icon: string | undefined | null): string {
     if (!icon) return "◇";
@@ -7578,7 +7580,17 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const vibeBanner = card.createDiv({ cls: "aos-life-vibe-banner" });
     const vibeIcon = vibeBanner.createSpan({ cls: "vibe-icon" });
     setIcon(vibeIcon, "sparkles");
-    vibeBanner.createSpan({ text: this.getDailyFrogQuote(dateObj) });
+    const quoteTextSpan = vibeBanner.createSpan({ cls: "vibe-text", text: this.getDailyFrogQuote(dateObj, this.quoteIndex) });
+    vibeBanner.setAttribute("title", "点击切换心流妙语");
+    vibeBanner.style.cursor = "pointer";
+    vibeBanner.addEventListener("click", () => {
+      this.quoteIndex = (this.quoteIndex < 0 ? dateObj.getDate() + 1 : this.quoteIndex + 1) % this.frogQuotesPool.length;
+      quoteTextSpan.style.opacity = "0.2";
+      setTimeout(() => {
+        quoteTextSpan.setText(this.getDailyFrogQuote(dateObj, this.quoteIndex));
+        quoteTextSpan.style.opacity = "1";
+      }, 120);
+    });
 
     // Weather widget
     if (weather && weather.current_condition && weather.current_condition[0]) {
@@ -7670,7 +7682,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
         itemEl.classList.add("is-empty");
         itemEl.textContent = `0${index + 1}  ·  灵感收件箱暂无条目`;
       } else {
-        itemEl.textContent = `💡 ${item.text}`;
+        itemEl.textContent = `✦  ${item.text}`;
       }
       itemEl.addEventListener("click", () => {
         if (item.path) {
@@ -7683,24 +7695,62 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
       });
     }
 
-    // Food choice
+    // Food & Coupon recommendation
     const foodRow = card.createDiv({ cls: "aos-life-food-recommend" });
-    const frogFile = this.app.vault.getAbstractFileByPath("08_密室/生活计划/frog.png");
-    if (frogFile instanceof TFile) {
-      const frogImg = foodRow.createEl("img", { cls: "aos-life-food-frog-icon" });
-      frogImg.src = this.app.vault.getResourcePath(frogFile);
-    } else {
-      foodRow.createSpan({ cls: "food-label", text: "🐸 " });
-    }
-    foodRow.createSpan({ cls: "food-label", text: "今日食路推荐：" });
-    const foodName = foodRow.createSpan({ cls: "food-name", text: foodChoice });
-    const refreshBtn = foodRow.createEl("button", { cls: "aos-life-food-refresh-btn", text: "🔄", attr: { title: "换一个" } });
-    refreshBtn.addEventListener("click", async () => {
-      refreshBtn.classList.add("is-spinning");
-      const newFood = await this.getRandomFoodChoice();
-      foodName.textContent = newFood;
-      setTimeout(() => refreshBtn.classList.remove("is-spinning"), 600);
-    });
+    const foodIconSpan = foodRow.createSpan({ cls: "food-ico" });
+    setIcon(foodIconSpan, "utensils");
+
+    const coupons = this.cloudBotSnapshot?.coupons || [];
+    const renderFoodRow = () => {
+      while (foodRow.childNodes.length > 1) {
+        if (foodRow.lastChild) foodRow.removeChild(foodRow.lastChild);
+      }
+
+      if (coupons.length > 0) {
+        const coupon = coupons[this.currentCouponIndex % coupons.length];
+        foodRow.createSpan({ cls: "food-label", text: "惠选外卖：" });
+        const nameEl = foodRow.createSpan({ cls: "food-name", text: `${coupon.shop_name} · 专享立减 ¥${coupon.discount_yuan}` });
+        nameEl.setAttribute("title", coupon.shop_name);
+
+        const actions = foodRow.createDiv({ cls: "food-actions", attr: { style: "display: flex; gap: 6px; margin-left: auto; align-items: center;" } });
+        if (coupon.coupon_url) {
+          const claimBtn = actions.createEl("button", {
+            cls: "aos-coupon-get-btn",
+            text: "领券 ↗"
+          });
+          claimBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            window.open(coupon.coupon_url, "_blank");
+          });
+        }
+
+        const nextBtn = actions.createEl("button", {
+          cls: "aos-life-food-refresh-btn",
+          attr: { title: "换一家 (共15家商家券)" }
+        });
+        setIcon(nextBtn, "rotate-cw");
+        nextBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          nextBtn.classList.add("is-spinning");
+          this.currentCouponIndex = (this.currentCouponIndex + 1) % coupons.length;
+          setTimeout(() => {
+            renderFoodRow();
+          }, 150);
+        });
+      } else {
+        foodRow.createSpan({ cls: "food-label", text: "今日食路推荐：" });
+        const foodName = foodRow.createSpan({ cls: "food-name", text: foodChoice });
+        const refreshBtn = foodRow.createEl("button", { cls: "aos-life-food-refresh-btn", attr: { title: "换一个" } });
+        setIcon(refreshBtn, "rotate-cw");
+        refreshBtn.addEventListener("click", async () => {
+          refreshBtn.classList.add("is-spinning");
+          const newFood = await this.getRandomFoodChoice();
+          foodName.textContent = newFood;
+          setTimeout(() => refreshBtn.classList.remove("is-spinning"), 600);
+        });
+      }
+    };
+    renderFoodRow();
   }
 
   private openFileByPath(path: string): void {
@@ -7735,16 +7785,31 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     return `${ganZhiYear} · 农历九月${lunarDayStr} · ${term}`;
   }
 
-  private getDailyFrogQuote(date: Date): string {
-    const quotes = [
-      "🐸 蛤蟆祥轻语：秋意浸染，心流正盛。工坊敲钟，灵台生辉。",
-      "🐸 蛤蟆祥轻语：静水流深，码字有道。松果凝露，神思自清。",
-      "🐸 蛤蟆祥轻语：晨光熹微，架构初定。小步快跑，行稳致远。",
-      "🐸 蛤蟆祥轻语：人间烟火气，最抚工坊心。今日宜专心，更宜好胃口。",
-      "🐸 蛤蟆祥轻语：万物归藏，工坊藏珠。灵感若泉，顺流而成章。"
-    ];
-    const day = date.getDate();
-    return quotes[day % quotes.length];
+  private frogQuotesPool: string[] = [
+    "万物归藏，工坊藏珠。灵感若泉，顺流而成章。",
+    "秋意浸染，心流正盛。工坊敲钟，灵台生辉。",
+    "静水流深，码字有道。松果凝露，神思自清。",
+    "晨曦初现，架构初定。小步快跑，行稳致远。",
+    "人间烟火气，最抚工坊心。今日宜专心，更宜好胃口。",
+    "秋风拂卷，笔端生云。去伪存真，理路自明。",
+    "剥离细枝末节，方见架构本真。静心调息，一气呵成。",
+    "眼前风景万千，不如一行干净代码、一卷温润墨香。",
+    "不疾不徐，守正出奇。山中何所有，岭上多白云。",
+    "词句需删繁就简，逻辑当如刀锋劈竹，干脆利落。",
+    "每一步调试皆是修行，每一行日志皆有因果。",
+    "日落江宁，归纳得失。放下纷扰，留待明日晴空。",
+    "工欲善其事，必先安其心。机括流转，天工开物。",
+    "天地有大美而不言，文章有真骨而不伪。",
+    "松柏长青于寒霜，学问精进于孤诣。",
+    "笔墨落定皆实相，心神所驻即灵山。"
+  ];
+
+  private getDailyFrogQuote(date: Date, explicitIndex?: number): string {
+    const pool = this.frogQuotesPool;
+    const idx = typeof explicitIndex === "number" && explicitIndex >= 0
+      ? explicitIndex % pool.length
+      : date.getDate() % pool.length;
+    return `蛤蟆祥轻语 · 霜降暮秋：${pool[idx]}`;
   }
 
   private getClothingAdvice(temp: number, feels: number): string {
@@ -7765,40 +7830,43 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     const tabs = headingRow.createDiv({ cls: "aos-life-bot-tabs" });
 
-    const steamTabBtn = tabs.createEl("button", {
-      cls: `aos-life-tab-btn ${this.activeLifeBotTab === "steam" ? "is-active" : ""}`,
-      text: "🎮 饰品行情"
-    });
+    const buildTab = (iconName: string, label: string, badge?: string) => {
+      const btn = tabs.createEl("button", { cls: "aos-life-tab-btn" });
+      const ico = btn.createSpan({ cls: "tab-ico" });
+      setIcon(ico, iconName);
+      btn.createSpan({ cls: "tab-label", text: label });
+      if (badge) {
+        btn.createSpan({ cls: "tab-badge", text: badge });
+      }
+      return btn;
+    };
 
+    const steamTabBtn = buildTab("trending-up", "饰品行情");
     const couponCount = this.cloudBotSnapshot?.coupons?.length ?? 15;
-    const couponTabBtn = tabs.createEl("button", {
-      cls: `aos-life-tab-btn ${this.activeLifeBotTab === "coupon" ? "is-active" : ""}`,
-      text: `🎟️ 商家券 (${couponCount})`
-    });
-
-    const todoTabBtn = tabs.createEl("button", {
-      cls: `aos-life-tab-btn ${this.activeLifeBotTab === "todo" ? "is-active" : ""}`,
-      text: "📋 密室待办"
-    });
+    const couponTabBtn = buildTab("ticket", "商家券", `${couponCount}`);
+    const todoTabBtn = buildTab("list-checks", "密室待办");
 
     const refreshBtn = headingRow.createEl("button", {
-      cls: "aos-life-tab-btn",
-      text: "🔄 云端同步",
+      cls: "aos-life-tab-btn aos-life-refresh-action",
       attr: { title: "从云端微信 Bot 立即拉取最新商家券与 Steam 行情数据" }
     });
+    const refreshIco = refreshBtn.createSpan({ cls: "tab-ico" });
+    setIcon(refreshIco, "refresh-cw");
+    const refreshText = refreshBtn.createSpan({ cls: "tab-label", text: "云端同步" });
 
     refreshBtn.addEventListener("click", async () => {
-      refreshBtn.setText("同步中...");
+      refreshIco.classList.add("is-spinning");
+      refreshText.setText("同步中...");
       try {
         this.cloudBotSnapshot = await this.cloudBotService.refreshFromCloud();
         this.populateLifeBotHub(card, todos);
       } catch (err) {
         new Notice("云端同步失败: " + String(err));
       } finally {
-        refreshBtn.setText("🔄 云端同步");
+        refreshIco.classList.remove("is-spinning");
+        refreshText.setText("云端同步");
       }
     });
-
     const contentArea = card.createDiv({ cls: "aos-life-bot-content" });
 
     const renderCurrentTab = () => {
@@ -8043,7 +8111,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
     const inputRow = card.createDiv({ cls: "aos-life-input-row" });
     const todoInput = inputRow.createEl("input", {
       cls: "aos-life-todo-input",
-      attr: { placeholder: "➕ 添加今日小目标..." }
+      attr: { placeholder: "添加今日专注目标..." }
     });
     todoInput.addEventListener("keydown", async (e) => {
       if (e.key === "Enter" && todoInput.value.trim()) {
@@ -8055,7 +8123,7 @@ private async renderContextPreview(parent: HTMLElement, node: KnowledgeNodeViewM
 
     const inspirationInput = inputRow.createEl("input", {
       cls: "aos-life-inspiration-input",
-      attr: { placeholder: "💡 记录随笔与灵感..." }
+      attr: { placeholder: "记录随笔与灵感..." }
     });
     inspirationInput.addEventListener("keydown", async (e) => {
       if (e.key === "Enter" && inspirationInput.value.trim()) {

@@ -41,28 +41,43 @@ export class CloudBotService {
   constructor(private app: App) {}
 
   /**
-   * Load cached cloud bot snapshot from vault synchronously/locally
+   * Load cached cloud bot snapshot from vault synchronously/locally,
+   * with automatic silent background refresh if cache is older than 45 minutes
    */
-  async loadSnapshot(): Promise<CloudBotSnapshot | null> {
+  async loadSnapshot(autoRefreshIfStale = true, onUpdated?: (snap: CloudBotSnapshot) => void): Promise<CloudBotSnapshot | null> {
+    let snapshot: CloudBotSnapshot | null = null;
     try {
       const adapter = this.app.vault.adapter;
       if (await adapter.exists(this.snapshotPath)) {
         const raw = await adapter.read(this.snapshotPath);
-        return JSON.parse(raw) as CloudBotSnapshot;
+        snapshot = JSON.parse(raw) as CloudBotSnapshot;
       }
     } catch (e) {
       console.warn("[CloudBotService] Failed to load local snapshot:", e);
     }
-    return null;
+
+    if (autoRefreshIfStale && !this.isRefreshing) {
+      const isStale = !snapshot || !snapshot.updated_at || (Date.now() - new Date(snapshot.updated_at).getTime() > 45 * 60 * 1000);
+      if (isStale) {
+        setTimeout(async () => {
+          const fresh = await this.refreshFromCloud(true);
+          if (fresh && onUpdated) {
+            onUpdated(fresh);
+          }
+        }, 1200);
+      }
+    }
+
+    return snapshot;
   }
 
   /**
    * Trigger background refresh by executing Python sync script
    */
-  async refreshFromCloud(): Promise<CloudBotSnapshot | null> {
+  async refreshFromCloud(silent = false): Promise<CloudBotSnapshot | null> {
     if (this.isRefreshing) {
-      new Notice("云端微信 Bot 正在同步中，请稍候...");
-      return this.loadSnapshot();
+      if (!silent) new Notice("云端微信 Bot 正在同步中，请稍候...");
+      return this.loadSnapshot(false);
     }
     this.isRefreshing = true;
 
@@ -71,11 +86,10 @@ export class CloudBotService {
         const { execFile } = (window as any).require("child_process");
         const scriptPath = "d:\\Yhx06\\Documents\\仙术工坊——项目集\\hamaxiang-system\\deploy\\sync_cloud_bot_data.py";
 
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve) => {
           execFile("python", [scriptPath], { timeout: 10000 }, (err: any, stdout: string, stderr: string) => {
             if (err) {
               console.warn("[CloudBotService] sync script error:", stderr || err);
-              // don't reject to avoid breaking UI, fallback to local cache
             }
             resolve();
           });
@@ -87,9 +101,9 @@ export class CloudBotService {
       this.isRefreshing = false;
     }
 
-    const updated = await this.loadSnapshot();
-    if (updated) {
-      new Notice("🎉 云端生活与微信 Bot 数据已同步！");
+    const updated = await this.loadSnapshot(false);
+    if (updated && !silent) {
+      new Notice("云端生活与微信 Bot 数据已同步！");
     }
     return updated;
   }
