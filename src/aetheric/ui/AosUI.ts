@@ -136,7 +136,22 @@ export class AosUI {
   }
 
   /**
-   * Creates a standardized clickable breadcrumb stream with count badge.
+   * Sanitizes ugly folder prefixes (e.g. 02_, 01_) and parenthetical suffixes
+   * to ensure breadcrumbs are clean and fit comfortably without truncation.
+   */
+  static formatCrumbLabel(rawName: string, isRoot = false): string {
+    if (isRoot) {
+      if (rawName.includes("松果池")) return "松果池";
+      if (rawName.includes("藏经阁")) return "藏经阁";
+      if (rawName.includes("丹炉间")) return "丹炉间";
+      if (rawName.includes("生活簿")) return "生活簿";
+    }
+    const cleaned = rawName.replace(/^\d+[_ -]/, "").replace(/（[^）]+）|\([^)]+\)/g, "").trim();
+    return cleaned || rawName;
+  }
+
+  /**
+   * Creates a standardized clickable breadcrumb stream with count badge and smart folding.
    */
   static breadcrumbs(parent: HTMLElement, options: AosBreadcrumbsOptions): {
     containerEl: HTMLElement;
@@ -148,22 +163,78 @@ export class AosUI {
 
     const parts = options.folderPath.split("/").filter(Boolean);
     let accum = "";
+    const crumbsData: Array<{ raw: string; label: string; path: string; isLast: boolean }> = [];
     for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      accum = accum ? `${accum}/${part}` : part;
-      const targetPath = accum;
-      const isLast = i === parts.length - 1;
-
-      const crumb = breadcrumb.createEl("button", {
-        cls: `aos-crumb-btn ${isLast ? "is-current" : ""}`,
-        text: part,
+      const raw = parts[i];
+      accum = accum ? `${accum}/${raw}` : raw;
+      crumbsData.push({
+        raw,
+        label: AosUI.formatCrumbLabel(raw, i === 0),
+        path: accum,
+        isLast: i === parts.length - 1,
       });
-      crumb.addEventListener("click", () => options.onSelectFolder(targetPath));
+    }
 
-      if (!isLast) {
-        breadcrumb.createSpan({ cls: "aos-crumb-sep", text: "›" });
+    if (crumbsData.length > 3) {
+      // First crumb (Root Pillar)
+      const first = crumbsData[0];
+      const firstBtn = breadcrumb.createEl("button", {
+        cls: "aos-crumb-btn",
+        text: first.label,
+        attr: { title: `跳转到: ${first.path}` },
+      });
+      firstBtn.addEventListener("click", () => options.onSelectFolder(first.path));
+      breadcrumb.createSpan({ cls: "aos-crumb-sep", text: "›" });
+
+      // Intermediate dropdown button
+      const moreBtn = breadcrumb.createEl("button", {
+        cls: "aos-crumb-btn aos-crumb-more",
+        text: "…",
+        attr: { title: "点击查看中间层级目录" },
+      });
+      moreBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const menu = new Menu();
+        for (let i = 1; i < crumbsData.length - 1; i++) {
+          const item = crumbsData[i];
+          menu.addItem((m: any) => {
+            m.setTitle(item.raw)
+              .setIcon("folder")
+              .onClick(() => options.onSelectFolder(item.path));
+          });
+        }
+        menu.showAtPosition({ x: e.clientX, y: e.clientY });
+      });
+      breadcrumb.createSpan({ cls: "aos-crumb-sep", text: "›" });
+
+      // Last crumb (Current Folder - Always Protected and Fully Visible)
+      const last = crumbsData[crumbsData.length - 1];
+      const lastBtn = breadcrumb.createEl("button", {
+        cls: "aos-crumb-btn is-current",
+        text: last.label,
+        attr: { title: `当前目录: ${last.path}` },
+      });
+      lastBtn.addEventListener("click", () => options.onSelectFolder(last.path));
+    } else {
+      // 1 to 3 crumbs: render cleanly with sanitized labels
+      for (let i = 0; i < crumbsData.length; i++) {
+        const item = crumbsData[i];
+        const btn = breadcrumb.createEl("button", {
+          cls: `aos-crumb-btn ${item.isLast ? "is-current" : ""}`,
+          text: item.label,
+          attr: { title: item.isLast ? `当前目录: ${item.path}` : `跳转到: ${item.path}` },
+        });
+        btn.addEventListener("click", () => options.onSelectFolder(item.path));
+        if (!item.isLast) {
+          breadcrumb.createSpan({ cls: "aos-crumb-sep", text: "›" });
+        }
       }
     }
+
+    window.requestAnimationFrame(() => {
+      breadcrumb.scrollLeft = breadcrumb.scrollWidth;
+    });
 
     const countBadge = container.createSpan({ cls: "aos-atlas-count-badge" });
     if (options.countText) {
